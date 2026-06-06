@@ -12,7 +12,7 @@ export default async function SettingsPage() {
     error = e instanceof Error ? e.message : String(e);
   }
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="w-full">
       <h1 className="text-xl font-semibold">Settings</h1>
       <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
         Runtime config (<code>~/.jigga/config.yaml</code>) — edits go through{" "}

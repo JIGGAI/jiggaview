@@ -35,7 +35,7 @@ export default async function DashboardPage() {
   const completed = tasks.filter((t) => t.state === "completed").length;
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="w-full">
       <h1 className="text-xl font-semibold">Dashboard</h1>
       <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
         Your JIGGA runtime at a glance.

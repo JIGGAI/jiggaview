@@ -46,7 +46,7 @@ export default async function TasksPage({
   tasks.sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")));
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="w-full">
       <h1 className="text-xl font-semibold">Tasks</h1>
       <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
         The runtime task queue — every channel message, scheduled wake, and dispatch.

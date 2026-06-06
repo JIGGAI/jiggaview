@@ -37,7 +37,7 @@ export default async function RecipesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="w-full">
       <h1 className="text-xl font-semibold">Recipes</h1>
       <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
         Scaffoldable agent &amp; team templates — JIGGA&apos;s install format.
