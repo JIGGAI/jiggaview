@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { runJiggaJson } from "@/lib/jigga-cli";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,17 @@ export default async function AgentsPage({
 
   return (
     <div className="w-full">
-      <h1 className="text-xl font-semibold">Agents</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-xl font-semibold">Agents</h1>
+        {teamId ? (
+          <Link
+            href={`/teams/${encodeURIComponent(teamId)}`}
+            className="rounded-lg bg-white/10 px-3 py-1 text-xs font-medium hover:bg-white/15"
+          >
+            Edit team
+          </Link>
+        ) : null}
+      </div>
       <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
         Your AI workers{teamId ? ` — team: ${teamId}` : ""}. Declared as yaml in{" "}
         <code>~/.jigga/agents/</code>; the supervisor wakes them when there&apos;s work.
@@ -62,7 +73,16 @@ export default async function AgentsPage({
             </div>
             <p className="mt-2 line-clamp-2 text-sm text-[color:var(--ck-text-secondary)]">{agent.role}</p>
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[color:var(--ck-text-tertiary)]">
-              <span>team: {agent.team ?? "—"}</span>
+              <span>
+                team:{" "}
+                {agent.team ? (
+                  <Link className="underline decoration-dotted hover:text-[color:var(--ck-text-primary)]" href={`/teams/${encodeURIComponent(agent.team)}`}>
+                    {agent.team}
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </span>
               <span>model: {agent.model ?? "—"}</span>
               <span>tools: {agent.tools.length}</span>
               <span>memory: {agent.memory_scope ?? "—"}</span>
