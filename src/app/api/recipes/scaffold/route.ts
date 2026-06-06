@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   const res = await runJigga(args);
   if (!res.ok) {
     return NextResponse.json(
-      { error: res.stderr.trim() || `scaffold failed (exit=${res.exitCode})` },
+      { error: res.stderr.trim() || res.stdout.trim() || `scaffold failed (exit=${res.exitCode})` },
       { status: 500 },
     );
   }
