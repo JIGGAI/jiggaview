@@ -15,7 +15,13 @@ export async function POST(request: Request) {
   if (!base || !id || !key || id.startsWith("-") || key.startsWith("-")) {
     return NextResponse.json({ error: "kind, id and key required" }, { status: 400 });
   }
-  const res = await runJigga([...base, "set", id, key, String(body.value ?? ""), "--json"]);
+  const wantRecipe = body.kind === "agent" && (body as { viaRecipe?: boolean }).viaRecipe !== false;
+  let res = wantRecipe
+    ? await runJigga([...base, "set", id, key, String(body.value ?? ""), "--recipe", "--json"])
+    : await runJigga([...base, "set", id, key, String(body.value ?? ""), "--json"]);
+  if (!res.ok && wantRecipe && (res.stdout + res.stderr).includes("not recipe-managed")) {
+    res = await runJigga([...base, "set", id, key, String(body.value ?? ""), "--json"]);
+  }
   if (!res.ok) {
     return NextResponse.json(
       { error: res.stderr.trim() || res.stdout.trim() || `set failed (exit=${res.exitCode})` },

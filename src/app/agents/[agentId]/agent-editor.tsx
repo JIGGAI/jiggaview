@@ -53,6 +53,18 @@ export default function AgentEditor({
   // config
   const [model, setModel] = useState(String(agent.model ?? ""));
   const [permissionMode, setPermissionMode] = useState(String(agent.permission_mode ?? ""));
+  const [tools, setTools] = useState(
+    (Array.isArray(agent.tools) ? (agent.tools as string[]) : []).join("\n"),
+  );
+  const [workflows, setWorkflows] = useState(
+    (Array.isArray(agent.workflows) ? (agent.workflows as string[]) : []).join("\n"),
+  );
+  const [permissions, setPermissions] = useState(
+    JSON.stringify(agent.permissions ?? {}, null, 2),
+  );
+  const [delegation, setDelegation] = useState(
+    JSON.stringify(agent.delegation ?? {}, null, 2),
+  );
   // files
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
@@ -69,7 +81,7 @@ export default function AgentEditor({
         await fetchJson("/api/entity", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ kind: "agent", id: agentId, key, value }),
+          body: JSON.stringify({ kind: "agent", id: agentId, key, value, viaRecipe: true }),
         });
       }
       setIsError(false);
@@ -224,12 +236,14 @@ export default function AgentEditor({
         ) : null}
 
         {tab === "config" ? (
-          <div className="ck-card max-w-2xl p-4">
+          <div className="ck-card max-w-3xl p-4">
             <h2 className="text-sm font-medium">Config</h2>
             <p className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">
-              Edits go through <code>jigga agents set</code> — validated (breaking values roll back) and audited.
+              Recipe-first: edits write the agent&apos;s definition in its team recipe
+              (<code>jigga agents set --recipe</code>) and regenerate the yaml from it —
+              validated, audited, portable. Breaking values roll back.
             </p>
-            <div className="mt-3 space-y-3">
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Model</div>
                 <input className={inputCls} placeholder="profile:default" value={model} onChange={(e) => setModel(e.target.value)} />
@@ -243,13 +257,38 @@ export default function AgentEditor({
                   ))}
                 </select>
               </div>
+              <div>
+                <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Tools (one per line)</div>
+                <textarea className={inputCls + " h-36 resize-none font-mono"} value={tools} onChange={(e) => setTools(e.target.value)} />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Workflows (one per line)</div>
+                <textarea className={inputCls + " h-36 resize-none font-mono"} value={workflows} onChange={(e) => setWorkflows(e.target.value)} />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Permissions (JSON)</div>
+                <textarea className={inputCls + " h-48 resize-none font-mono"} value={permissions} onChange={(e) => setPermissions(e.target.value)} />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Delegation (JSON)</div>
+                <textarea className={inputCls + " h-48 resize-none font-mono"} value={delegation} onChange={(e) => setDelegation(e.target.value)} />
+              </div>
+            </div>
+            <div className="mt-4">
               <button
                 className={primaryBtn}
                 disabled={busy}
                 onClick={() => {
-                  const pairs: Array<[string, string]> = [["model", model]];
+                  const lines = (v: string) => JSON.stringify(v.split("\n").map((s) => s.trim()).filter(Boolean));
+                  const pairs: Array<[string, string]> = [
+                    ["model", model],
+                    ["tools", lines(tools)],
+                    ["workflows", lines(workflows)],
+                    ["permissions", permissions],
+                    ["delegation", delegation],
+                  ];
                   if (permissionMode) pairs.push(["permission_mode", permissionMode]);
-                  void setKeys(pairs, "Saved agent config");
+                  void setKeys(pairs, "Saved agent config (recipe updated)");
                 }}
               >
                 Save config
