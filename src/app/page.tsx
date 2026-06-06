@@ -1,82 +1,103 @@
+import Link from "next/link";
 import { runJiggaJson } from "@/lib/jigga-cli";
 
 export const dynamic = "force-dynamic";
 
-type Check = { name: string; status: "ok" | "warn" | "fail"; summary: string; hint?: string };
-type Task = { id: string; state: string; assignee?: string; title: string };
-
-async function getDoctor(): Promise<Check[] | null> {
-  try {
-    const report = await runJiggaJson<{ checks: Check[] }>(["doctor", "--json"]);
-    return report.checks ?? [];
-  } catch {
-    return null;
-  }
-}
-
-async function getTasks(): Promise<Task[]> {
-  try {
-    return await runJiggaJson<Task[]>(["task", "list", "--json"]);
-  } catch {
-    return [];
-  }
-}
-
-const STATUS_DOT: Record<string, string> = {
-  ok: "bg-emerald-400",
-  warn: "bg-amber-400",
-  fail: "bg-red-400",
+type Agent = {
+  id: string;
+  name: string;
+  role: string;
+  model?: string | null;
+  default: boolean;
+  team?: string | null;
 };
+type Team = { id: string; name: string };
 
-export default async function DashboardPage() {
-  const [checks, tasks] = await Promise.all([getDoctor(), getTasks()]);
-  const pending = tasks.filter((t) => t.state === "pending").length;
-  const running = tasks.filter((t) => t.state === "running" || t.state === "claimed").length;
-  const completed = tasks.filter((t) => t.state === "completed").length;
+/** ClawKitchen's home: installed agents grouped by team workspace —
+ * section per team (Edit → team editor), agent cards into the editor. */
+export default async function HomePage() {
+  let agents: Agent[] = [];
+  let teams: Team[] = [];
+  let error: string | null = null;
+  try {
+    [agents, teams] = await Promise.all([
+      runJiggaJson<Agent[]>(["agents", "list", "--json"]),
+      runJiggaJson<Team[]>(["team", "list", "--json"]),
+    ]);
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+  const teamNames = new Map(teams.map((t) => [t.id, t.name]));
+  const groups = new Map<string, Agent[]>();
+  for (const agent of agents) {
+    // solo agents resolve team == their own id → group those under personal
+    const key = agent.team && teamNames.has(agent.team) ? agent.team : "personal";
+    groups.set(key, [...(groups.get(key) ?? []), agent]);
+  }
+  const ordered = [...groups.keys()].sort((a, b) =>
+    a === "personal" ? 1 : b === "personal" ? -1 : a.localeCompare(b),
+  );
 
   return (
     <div className="w-full">
-      <h1 className="text-xl font-semibold">Dashboard</h1>
-      <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
-        Your JIGGA runtime at a glance.
-      </p>
-
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {[
-          ["Pending tasks", pending],
-          ["Running", running],
-          ["Completed", completed],
-        ].map(([label, value]) => (
-          <div key={String(label)} className="rounded-xl border border-[color:var(--ck-border-subtle)] bg-white/5 p-4">
-            <div className="text-3xl font-semibold">{value}</div>
-            <div className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">{label}</div>
-          </div>
-        ))}
+      <div className="flex items-baseline justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Agents</h1>
+          <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
+            Installed agents grouped by team workspace
+          </p>
+        </div>
       </div>
+      {error ? <p className="mt-4 text-sm text-red-400">{error}</p> : null}
 
-      <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">
-        Health (jigga doctor)
-      </h2>
-      {checks === null ? (
-        <p className="mt-2 text-sm text-amber-400">
-          Couldn&apos;t run <code>jigga doctor</code> — is the jigga CLI on PATH? (Set JIGGA_BIN to override.)
-        </p>
-      ) : (
-        <ul className="mt-2 divide-y divide-[color:var(--ck-border-subtle)] rounded-xl border border-[color:var(--ck-border-subtle)]">
-          {checks.map((c) => (
-            <li key={c.name} className="flex items-start gap-3 p-3">
-              <span className={`mt-1.5 size-2 shrink-0 rounded-full ${STATUS_DOT[c.status] ?? "bg-gray-400"}`} />
+      {ordered.map((teamId) => {
+        const isTeam = teamId !== "personal";
+        const sectionAgents = (groups.get(teamId) ?? []).sort((a, b) => a.id.localeCompare(b.id));
+        return (
+          <section key={teamId} className="mt-8">
+            <div className="flex items-center gap-3">
               <div>
-                <div className="text-sm font-medium">{c.name}</div>
-                <div className="text-sm text-[color:var(--ck-text-secondary)]">{c.summary}</div>
-                {c.hint && c.status !== "ok" ? (
-                  <div className="mt-0.5 text-xs text-[color:var(--ck-text-tertiary)]">{c.hint}</div>
+                <h2 className="text-lg font-semibold tracking-tight">
+                  {isTeam ? teamNames.get(teamId) ?? teamId : "Personal / Unassigned"}
+                </h2>
+                {isTeam ? (
+                  <div className="font-mono text-xs text-[color:var(--ck-text-tertiary)]">
+                    workspaces/{teamId}
+                  </div>
                 ) : null}
               </div>
-            </li>
-          ))}
-        </ul>
-      )}
+              {isTeam ? (
+                <Link
+                  href={`/teams/${encodeURIComponent(teamId)}`}
+                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+                >
+                  Edit
+                </Link>
+              ) : null}
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {sectionAgents.map((agent) => (
+                <Link
+                  key={agent.id}
+                  href={`/agents/${encodeURIComponent(agent.id)}?returnTo=/`}
+                  className="ck-card block p-4 transition hover:border-[color:var(--ck-border-strong)]"
+                >
+                  <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">
+                    {agent.name || agent.id}
+                    {agent.default ? (
+                      <span className="text-[color:var(--ck-text-tertiary)]"> · default</span>
+                    ) : null}
+                  </div>
+                  <div className="mt-0.5 font-mono text-xs text-[color:var(--ck-text-tertiary)]">{agent.id}</div>
+                  {agent.model ? (
+                    <div className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">· {agent.model}</div>
+                  ) : null}
+                </Link>
+              ))}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }

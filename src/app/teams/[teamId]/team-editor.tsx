@@ -1,127 +1,394 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { FileListWithOptionalToggle } from "@/components/FileListWithOptionalToggle";
 import { fetchJson } from "@/lib/fetch-json";
 
+type Tab = "agents" | "recipe" | "files" | "cron";
+type FileEntry = { name: string; missing: boolean; required?: boolean };
 type Member = { id?: string; role?: string; required?: boolean };
+type AgentListItem = {
+  id: string; name: string; role: string; model?: string | null;
+  default: boolean; schedules: number;
+};
+
+const inputCls =
+  "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]";
+const primaryBtn =
+  "rounded-lg bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white disabled:opacity-50";
+const greenBtn =
+  "rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50";
+const secondaryBtn =
+  "rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10 disabled:opacity-50";
 
 export default function TeamEditor({
   teamId,
   team,
+  teamAgents,
 }: {
   teamId: string;
   team: Record<string, unknown>;
+  teamAgents: AgentListItem[];
 }) {
   const router = useRouter();
-  const [message, setMessage] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("agents");
   const [busy, setBusy] = useState(false);
-  const [name, setName] = useState(String(team.name ?? ""));
-  const [purpose, setPurpose] = useState(String(team.purpose ?? ""));
-  const [assignee, setAssignee] = useState(
-    String((team.routing as Record<string, unknown> | undefined)?.default_assignee ?? ""),
-  );
-  const [key, setKey] = useState("");
-  const [value, setValue] = useState("");
-  const members = Array.isArray(team.agents) ? (team.agents as Member[]) : [];
+  const [message, setMessage] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
 
-  async function setField(k: string, v: string) {
+  const members = Array.isArray(team.agents) ? (team.agents as Member[]) : [];
+  const recipeStem = recipeStemFor(teamId);
+
+  // agents tab: add-member form
+  const [newRole, setNewRole] = useState("");
+  const [newAgentId, setNewAgentId] = useState("");
+  // recipe tab
+  const [recipeContent, setRecipeContent] = useState("");
+  const [recipeLoaded, setRecipeLoaded] = useState(false);
+  const [recipeError, setRecipeError] = useState<string | null>(null);
+  // files tab
+  const [files, setFiles] = useState<FileEntry[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [showOptionalFiles, setShowOptionalFiles] = useState(false);
+  const [fileName, setFileName] = useState("TEAM.md");
+  const [fileContent, setFileContent] = useState("");
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  function note(text: string, error = false) {
+    setIsError(error);
+    setMessage(text);
+  }
+
+  function recipeStemFor(id: string): string {
+    return id.replaceAll("_", "-");
+  }
+
+  async function addMember() {
+    const id = newAgentId.trim();
+    const role = newRole.trim() || id;
+    if (!id) return;
     setBusy(true);
-    setMessage(null);
     try {
-      const out = await fetchJson<{ key: string; old: unknown; new: unknown }>("/api/entity", {
+      const next = [...members, { id, role, required: false }];
+      await fetchJson("/api/entity", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind: "team", id: teamId, key: k, value: v }),
+        body: JSON.stringify({ kind: "team", id: teamId, key: "agents", value: JSON.stringify(next) }),
       });
-      setMessage(`${out.key}: ${JSON.stringify(out.old)} → ${JSON.stringify(out.new)}`);
+      note(`Added ${id} to the roster (membership-only — staff it via a recipe or yaml).`);
+      setNewAgentId("");
+      setNewRole("");
       router.refresh();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e));
+      note(e instanceof Error ? e.message : String(e), true);
     } finally {
       setBusy(false);
     }
   }
 
-  const field =
-    "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]";
-  const button =
-    "rounded-lg bg-white/10 px-3 py-2 text-sm font-medium hover:bg-white/15 disabled:opacity-50";
+  const loadRecipe = useCallback(async () => {
+    setRecipeError(null);
+    try {
+      const out = await fetchJson<{ content: string }>(
+        `/api/recipes/raw?name=${encodeURIComponent(recipeStem)}`,
+        { cache: "no-store" },
+      );
+      setRecipeContent(out.content ?? "");
+      setRecipeLoaded(true);
+    } catch {
+      setRecipeError(`No recipe found for ${recipeStem} — this team may be hand-written.`);
+      setRecipeLoaded(true);
+    }
+  }, [recipeStem]);
+
+  async function saveRecipe() {
+    setBusy(true);
+    setRecipeError(null);
+    try {
+      const out = await fetchJson<{ path?: string }>("/api/recipes/raw", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: recipeStem, content: recipeContent }),
+      });
+      note(`Saved team recipe: ${out.path ?? recipeStem}`);
+    } catch (e) {
+      setRecipeError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function publishChanges() {
+    setBusy(true);
+    try {
+      await fetchJson("/api/recipes/scaffold", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: recipeStem, id: teamId, overwrite: true }),
+      });
+      note("Published changes to active team (re-scaffolded from the recipe).");
+      router.refresh();
+    } catch (e) {
+      note(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const loadFiles = useCallback(async () => {
+    setFilesLoading(true);
+    try {
+      const out = await fetchJson<{ files: FileEntry[] }>(
+        `/api/files?kind=team&id=${encodeURIComponent(teamId)}`,
+        { cache: "no-store" },
+      );
+      setFiles(out.files ?? []);
+    } catch {
+      setFiles([]);
+    } finally {
+      setFilesLoading(false);
+    }
+  }, [teamId]);
+
+  const loadFile = useCallback(
+    async (name: string) => {
+      setFileName(name);
+      setFileError(null);
+      try {
+        const out = await fetchJson<{ content: string }>(
+          `/api/files?kind=team&id=${encodeURIComponent(teamId)}&name=${encodeURIComponent(name)}`,
+          { cache: "no-store" },
+        );
+        setFileContent(out.content ?? "");
+      } catch (e) {
+        setFileError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [teamId],
+  );
+
+  async function saveFile() {
+    setBusy(true);
+    setFileError(null);
+    try {
+      await fetchJson("/api/files", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "team", id: teamId, name: fileName, content: fileContent }),
+      });
+      await loadFiles();
+    } catch (e) {
+      setFileError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runAgent(agentId: string) {
+    setBusy(true);
+    try {
+      await fetchJson("/api/task", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: "Run your scheduled work loop now",
+          assignee: agentId,
+          description: "Manual run from jiggaview: act per your wake-schedule instructions.",
+        }),
+      });
+      note(`Queued a run for ${agentId} — the supervisor picks it up within a tick.`);
+    } catch (e) {
+      note(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (tab === "recipe" && !recipeLoaded) void loadRecipe();
+    if (tab === "files") {
+      void loadFiles();
+      void loadFile("TEAM.md");
+    }
+  }, [tab, recipeLoaded, loadRecipe, loadFiles, loadFile]);
+
+  const tabBtn = (t: Tab, label: string) => (
+    <button
+      key={t}
+      onClick={() => setTab(t)}
+      className={
+        "rounded-lg px-3 py-1.5 text-sm font-medium " +
+        (tab === t
+          ? "bg-[var(--ck-accent-red)] text-white"
+          : "border border-white/10 bg-white/5 text-[color:var(--ck-text-secondary)] hover:bg-white/10")
+      }
+    >
+      {label}
+    </button>
+  );
+
+  const staffed = new Set(teamAgents.map((a) => a.id));
 
   return (
-    <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <div className="space-y-4">
-        <div className="rounded-xl border border-[color:var(--ck-border-subtle)] bg-white/5 p-4">
-          <h2 className="text-sm font-semibold">Edit</h2>
-          {message ? (
-            <p className="mt-1 text-xs text-[color:var(--ck-text-secondary)]">{message}</p>
-          ) : null}
-          <div className="mt-3 space-y-3">
-            {[
-              ["name", name, setName] as const,
-              ["purpose", purpose, setPurpose] as const,
-              ["routing.default_assignee", assignee, setAssignee] as const,
-            ].map(([k, v, set]) => (
-              <div key={k} className="flex gap-2">
-                <div className="w-52 shrink-0 pt-2 text-xs text-[color:var(--ck-text-tertiary)]">{k}</div>
-                <input className={field} value={v} onChange={(e) => set(e.target.value)} />
-                <button className={button} disabled={busy} onClick={() => setField(k, v)}>
-                  Save
-                </button>
+    <div className="w-full">
+      <h1 className="text-xl font-semibold">{String(team.name ?? teamId)}</h1>
+      <div className="font-mono text-xs text-[color:var(--ck-text-tertiary)]">{teamId}</div>
+
+      <div className="sticky top-0 z-10 mt-4 flex gap-2 bg-[color:var(--ck-bg-primary)] py-2">
+        {tabBtn("agents", "Agents")}
+        {tabBtn("recipe", "Recipe")}
+        {tabBtn("files", "Files")}
+        {tabBtn("cron", "Cron")}
+      </div>
+
+      {message ? (
+        <div
+          className={
+            "mt-3 rounded-lg border p-3 text-sm " +
+            (isError
+              ? "border-red-400/30 bg-red-500/10 text-red-100"
+              : "border-emerald-400/30 bg-emerald-500/10 text-emerald-100")
+          }
+        >
+          {message}
+        </div>
+      ) : null}
+
+      {tab === "agents" ? (
+        <div className="mt-4 space-y-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {teamAgents.map((agent) => (
+              <div key={agent.id} className="ck-card p-4">
+                <div className="text-sm font-medium">
+                  {agent.name || agent.id}
+                  {agent.default ? <span className="text-[color:var(--ck-text-tertiary)]"> · default</span> : null}
+                </div>
+                <div className="mt-0.5 font-mono text-xs text-[color:var(--ck-text-tertiary)]">{agent.id}</div>
+                {agent.model ? (
+                  <div className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">· {agent.model}</div>
+                ) : null}
+                <div className="mt-3">
+                  <Link
+                    href={`/agents/${encodeURIComponent(agent.id)}?returnTo=/teams/${encodeURIComponent(teamId)}`}
+                    className={secondaryBtn}
+                  >
+                    Edit
+                  </Link>
+                </div>
               </div>
             ))}
-            <div className="flex gap-2 border-t border-[color:var(--ck-border-subtle)] pt-3">
-              <input
-                className={field}
-                placeholder="any.dotted.key"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-              />
-              <input
-                className={field}
-                placeholder="value (JSON-coerced)"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-              />
-              <button className={button} disabled={busy || !key} onClick={() => setField(key, value)}>
-                Set
+            {members
+              .filter((m) => m.id && !staffed.has(String(m.id)))
+              .map((m) => (
+                <div key={m.id} className="ck-card border-dashed p-4 opacity-70">
+                  <div className="text-sm font-medium">{m.id}</div>
+                  <div className="mt-0.5 text-xs text-[color:var(--ck-text-tertiary)]">
+                    {m.role} · membership-only (not staffed)
+                  </div>
+                </div>
+              ))}
+            {teamAgents.length === 0 && members.length === 0 ? (
+              <div className="text-sm text-[color:var(--ck-text-tertiary)]">No team agents detected.</div>
+            ) : null}
+          </div>
+
+          <div className="ck-card max-w-2xl p-4">
+            <h2 className="text-sm font-medium">Add agent to roster</h2>
+            <p className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">
+              Adds a member to the team yaml (membership-only). Staff it from a recipe or yaml; handoffs and
+              workflows can reference it immediately.
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input className={inputCls} placeholder="agent id, e.g. meeting_prep_agent" value={newAgentId} onChange={(e) => setNewAgentId(e.target.value)} />
+              <input className={inputCls} placeholder="role (optional), e.g. meeting prep" value={newRole} onChange={(e) => setNewRole(e.target.value)} />
+              <button className={primaryBtn} disabled={busy || !newAgentId.trim()} onClick={() => void addMember()}>
+                Add agent
               </button>
             </div>
-            <p className="text-xs text-[color:var(--ck-text-tertiary)]">
-              Edits go through <code>jigga team set</code> — validated (breaking values roll back) and audited.
-            </p>
           </div>
         </div>
+      ) : null}
 
-        <div className="rounded-xl border border-[color:var(--ck-border-subtle)] bg-white/5 p-4">
-          <h2 className="text-sm font-semibold">Members</h2>
-          <table className="mt-2 w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">
-              <tr>
-                <th className="py-1 pr-3">Agent</th>
-                <th className="py-1 pr-3">Role</th>
-                <th className="py-1">Required</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[color:var(--ck-border-subtle)]">
-              {members.map((m, i) => (
-                <tr key={m.id ?? i}>
-                  <td className="py-1.5 pr-3 font-mono text-xs">{m.id}</td>
-                  <td className="py-1.5 pr-3">{m.role}</td>
-                  <td className="py-1.5">{m.required === false ? "optional" : "required"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {tab === "recipe" ? (
+        <div className="mt-4 space-y-4">
+          <div className="ck-card p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <button className={primaryBtn} disabled={busy} onClick={() => void saveRecipe()}>Save</button>
+              <button className={greenBtn} disabled={busy} onClick={() => void publishChanges()}>Publish changes</button>
+              <span className="text-xs text-[color:var(--ck-text-tertiary)]">
+                Save writes your user-dir recipe copy (validated; overrides the bundled one). Publish re-scaffolds
+                this team from it (<code>jigga recipes scaffold {recipeStem} --id {teamId} --overwrite</code>).
+              </span>
+            </div>
+          </div>
+          <div className="ck-card p-4">
+            <h2 className="text-sm font-medium">Recipe markdown — {recipeStem}.md</h2>
+            {recipeError ? (
+              <div className="mt-2 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">
+                {recipeError}
+              </div>
+            ) : null}
+            <textarea
+              className="mt-3 h-[55vh] w-full resize-none rounded-lg border border-white/10 bg-black/30 p-3 font-mono text-xs text-[color:var(--ck-text-primary)]"
+              value={recipeContent}
+              onChange={(e) => setRecipeContent(e.target.value)}
+            />
+          </div>
         </div>
-      </div>
+      ) : null}
 
-      <div className="rounded-xl border border-[color:var(--ck-border-subtle)] bg-white/5 p-4">
-        <h2 className="text-sm font-semibold">Team yaml</h2>
-        <pre className="mt-2 max-h-[34rem] overflow-auto rounded-lg bg-black/30 p-3 text-xs">
-          {JSON.stringify(team, null, 2)}
-        </pre>
-      </div>
+      {tab === "files" ? (
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <FileListWithOptionalToggle
+            title="Team files"
+            files={files}
+            loading={filesLoading}
+            showOptionalFiles={showOptionalFiles}
+            onShowOptionalChange={setShowOptionalFiles}
+            selectedFileName={fileName}
+            onSelectFile={(n) => void loadFile(n)}
+          />
+          <div className="ck-card p-4 lg:col-span-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium">Edit: {fileName}</h2>
+              <button className={primaryBtn} disabled={busy} onClick={() => void saveFile()}>Save file</button>
+            </div>
+            {fileError ? (
+              <div className="mt-2 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">
+                {fileError}
+              </div>
+            ) : null}
+            <textarea
+              className="mt-3 h-[55vh] w-full resize-none rounded-lg border border-white/10 bg-black/30 p-3 font-mono text-xs text-[color:var(--ck-text-primary)]"
+              value={fileContent}
+              onChange={(e) => setFileContent(e.target.value)}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {tab === "cron" ? (
+        <div className="mt-4 space-y-3">
+          {teamAgents.filter((a) => a.schedules > 0).map((agent) => (
+            <div key={agent.id} className="ck-card flex items-center justify-between p-4">
+              <div>
+                <div className="text-sm font-medium">{agent.name || agent.id}</div>
+                <div className="text-xs text-[color:var(--ck-text-tertiary)]">
+                  {agent.schedules} scheduled work-loop{agent.schedules === 1 ? "" : "s"}
+                </div>
+              </div>
+              <button className={secondaryBtn} disabled={busy} onClick={() => void runAgent(agent.id)}>
+                Run
+              </button>
+            </div>
+          ))}
+          {teamAgents.every((a) => a.schedules === 0) ? (
+            <p className="text-sm text-[color:var(--ck-text-tertiary)]">No cron jobs detected for this team.</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
