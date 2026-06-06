@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { fetchJson } from "@/lib/fetch-json";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ToastProvider } from "@/components/ToastProvider";
 
@@ -120,6 +121,80 @@ const NAV = [
   },
 ];
 
+function TeamSwitcher({ collapsed }: { collapsed: boolean }) {
+  const router = useRouter();
+  const pathname = usePathname() ?? "/";
+  const searchParams = useSearchParams();
+  const selected = searchParams.get("team") ?? "";
+  const [teamIds, setTeamIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const json = await fetchJson<{ teams?: Array<{ id?: unknown }> }>("/api/teams", { cache: "no-store" });
+        const ids = (json.teams ?? []).map((t) => String(t.id ?? "")).filter(Boolean);
+        setTeamIds(ids.sort());
+      } catch {
+        setTeamIds([]);
+      }
+    })();
+  }, []);
+
+  if (collapsed) {
+    return (
+      <div className="border-b border-[color:var(--ck-border-subtle)] p-2 text-center text-xs" title={selected || "All teams"}>
+        👥
+      </div>
+    );
+  }
+  return (
+    <div className="border-b border-[color:var(--ck-border-subtle)] p-2">
+      <div className="px-2 pt-1 text-xs font-semibold uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">
+        Team
+      </div>
+      <select
+        value={selected}
+        onChange={(e) => {
+          const id = e.target.value;
+          const params = new URLSearchParams(searchParams.toString());
+          if (id) params.set("team", id);
+          else params.delete("team");
+          const qs = params.toString();
+          router.push(qs ? `${pathname}?${qs}` : pathname);
+        }}
+        className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-sm text-[color:var(--ck-text-primary)]"
+      >
+        <option value="">All teams</option>
+        {teamIds.map((id) => (
+          <option key={id} value={id}>
+            {id}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function NavWithTeam({ collapsed, pathname }: { collapsed: boolean; pathname: string }) {
+  const searchParams = useSearchParams();
+  const team = searchParams.get("team");
+  const suffix = team ? `?team=${encodeURIComponent(team)}` : "";
+  return (
+    <nav className="min-h-0 flex-1 overflow-auto p-2">
+      {NAV.map((it) => (
+        <SideNavLink
+          key={it.href}
+          href={`${it.href}${suffix}`}
+          label={it.label}
+          icon={it.icon}
+          collapsed={collapsed}
+          active={it.href === "/" ? pathname === "/" : pathname.startsWith(it.href)}
+        />
+      ))}
+    </nav>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "/";
   const [collapsed, setCollapsed] = useState(false);
@@ -148,18 +223,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
 
-          <nav className="min-h-0 flex-1 overflow-auto p-2">
-            {NAV.map((it) => (
-              <SideNavLink
-                key={it.href}
-                href={it.href}
-                label={it.label}
-                icon={it.icon}
-                collapsed={collapsed}
-                active={it.href === "/" ? pathname === "/" : pathname.startsWith(it.href)}
-              />
-            ))}
-          </nav>
+          <Suspense fallback={null}>
+            <TeamSwitcher collapsed={collapsed} />
+          </Suspense>
+
+          <Suspense fallback={null}>
+            <NavWithTeam collapsed={collapsed} pathname={pathname} />
+          </Suspense>
 
           <div className="flex items-center justify-between gap-2 border-t border-[color:var(--ck-border-subtle)] p-2">
             <a

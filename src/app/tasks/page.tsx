@@ -21,11 +21,25 @@ const STATE_BADGE: Record<string, string> = {
   needs_approval: "bg-purple-500/20 text-purple-300",
 };
 
-export default async function TasksPage() {
+type Team = { id: string; members: string[] };
+
+export default async function TasksPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = (await searchParams) ?? {};
+  const teamId = typeof sp.team === "string" ? sp.team : "";
   let tasks: Task[] = [];
   let error: string | null = null;
   try {
     tasks = await runJiggaJson<Task[]>(["task", "list", "--json"]);
+    if (teamId) {
+      const teams = await runJiggaJson<Team[]>(["team", "list", "--json"]);
+      const team = teams.find((t) => t.id === teamId);
+      const members = new Set(team?.members ?? []);
+      tasks = tasks.filter((t) => (t.assignee ? members.has(t.assignee) : false));
+    }
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
@@ -36,7 +50,7 @@ export default async function TasksPage() {
       <h1 className="text-xl font-semibold">Tasks</h1>
       <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
         The runtime task queue — every channel message, scheduled wake, and dispatch.
-        (Lane boards land with ticket lanes, JIGGA #110.)
+        {teamId ? ` Filtered to team: ${teamId}.` : ""} (Lane boards land with ticket lanes, JIGGA #110.)
       </p>
       {error ? <p className="mt-4 text-sm text-red-400">{error}</p> : null}
       <div className="mt-6 overflow-hidden rounded-xl border border-[color:var(--ck-border-subtle)]">
