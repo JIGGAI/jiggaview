@@ -60,6 +60,18 @@ const NAV = [
     ),
   },
   {
+    href: "/chat",
+    label: "Chat",
+    icon: (
+      <Icon>
+        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Z" />
+          <path d="M9 11h6" />
+        </svg>
+      </Icon>
+    ),
+  },
+  {
     href: "/dashboard",
     label: "Dashboard",
     icon: (
