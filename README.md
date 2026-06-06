@@ -43,8 +43,8 @@ M1 (operate set) in progress:
 - ✅ Recipes (list / installed state / drift / scaffold)
 - ✅ Tasks (live queue)
 - ✅ Settings (config get/set)
-- ⏳ Agents (lands with `jigga agents list --json` core PR)
-- ⏳ Runs (audit/trace wiring)
+- ✅ Agents (cards: team/model/tools/cron badges, team-filtered)
+- ✅ Runs (live audit log)
 
 M2: webchat (channel adapter) · tickets (lanes, JIGGA #110). M3: teams/workspaces · memory browser · approvals.
 
