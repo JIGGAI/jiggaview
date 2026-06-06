@@ -65,19 +65,35 @@ export default function TeamEditor({
     return id.replaceAll("_", "-");
   }
 
+  async function staffMember(memberId: string, role?: string) {
+    setBusy(true);
+    try {
+      await fetchJson("/api/team-staff", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ team: teamId, member: memberId, role }),
+      });
+      note(`Staffed ${memberId} — agent created from the team recipe (now in ~/.jigga/recipes).`);
+      router.refresh();
+    } catch (e) {
+      note(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function addMember() {
     const id = newAgentId.trim();
     const role = newRole.trim() || id;
     if (!id) return;
     setBusy(true);
     try {
-      const next = [...members, { id, role, required: false }];
-      await fetchJson("/api/entity", {
+      await fetchJson("/api/team-staff", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind: "team", id: teamId, key: "agents", value: JSON.stringify(next) }),
+        body: JSON.stringify({ team: teamId, member: id, role }),
       });
-      note(`Added ${id} to the roster (membership-only — staff it via a recipe or yaml).`);
+      note(`Added and staffed ${id} — agent created from the team recipe.`);
       setNewAgentId("");
       setNewRole("");
       router.refresh();
@@ -282,10 +298,19 @@ export default function TeamEditor({
             {members
               .filter((m) => m.id && !staffed.has(String(m.id)))
               .map((m) => (
-                <div key={m.id} className="ck-card border-dashed p-4 opacity-70">
+                <div key={m.id} className="ck-card border-dashed p-4 opacity-80">
                   <div className="text-sm font-medium">{m.id}</div>
                   <div className="mt-0.5 text-xs text-[color:var(--ck-text-tertiary)]">
                     {m.role} · membership-only (not staffed)
+                  </div>
+                  <div className="mt-3">
+                    <button
+                      className={primaryBtn}
+                      disabled={busy}
+                      onClick={() => void staffMember(String(m.id), m.role ? String(m.role) : undefined)}
+                    >
+                      Staff agent
+                    </button>
                   </div>
                 </div>
               ))}
@@ -295,10 +320,10 @@ export default function TeamEditor({
           </div>
 
           <div className="ck-card max-w-2xl p-4">
-            <h2 className="text-sm font-medium">Add agent to roster</h2>
+            <h2 className="text-sm font-medium">Add agent</h2>
             <p className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">
-              Adds a member to the team yaml (membership-only). Staff it from a recipe or yaml; handoffs and
-              workflows can reference it immediately.
+              Adds the member to the team recipe with a starter definition and creates the agent
+              (batteries included — edit it right after).
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <input className={inputCls} placeholder="agent id, e.g. meeting_prep_agent" value={newAgentId} onChange={(e) => setNewAgentId(e.target.value)} />
