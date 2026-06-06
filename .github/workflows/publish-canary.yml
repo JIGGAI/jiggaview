@@ -1,0 +1,71 @@
+name: Publish Canary (PR)
+
+on:
+  # Disabled for now (RJ request 2026-03-05): we don't want automated npm publishes on every PR.
+  # Keep this workflow around so we can re-enable later.
+  workflow_dispatch:
+    inputs:
+      prNumber:
+        description: "PR number (used to tag canary-<prNumber>)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: canary-${{ inputs.prNumber }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Publish canary tag for PR
+    runs-on: ubuntu-latest
+
+    # Manual only; still don't publish from forks (defense-in-depth).
+    if: >-
+      github.repository_owner == 'JIGGAI'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Bump prerelease version (unique per run; no git tag)
+        env:
+          PR_NUMBER: ${{ inputs.prNumber }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          # npm forbids republishing the same version.
+          # github.run_attempt only changes on re-runs of the same workflow run; a new run starts at attempt=1.
+          # So include run_number (monotonic per repo) to guarantee uniqueness across runs.
+          PREID="canary.${PR_NUMBER}.${RUN_NUMBER}.${RUN_ATTEMPT}"
+          npm version prerelease --preid "$PREID" --no-git-tag-version
+
+      - name: Publish to npm (tag = canary-<pr>)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          TAG="canary-${{ inputs.prNumber }}"
+          npm publish --tag "$TAG"
+
+      - name: Echo install command
+        run: |
+          echo "Published canary tag canary-${{ inputs.prNumber }}"
+          echo "Install: npm i @jiggai/kitchen@canary-${{ inputs.prNumber }}"

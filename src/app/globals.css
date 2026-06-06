@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+/*
+  Claw Kitchen UI tokens
+  Modernized: dark-first design matching clawmarket aesthetic.
+  Navy blues, coral/cyan accents, deep shadows, subtle gradients.
+*/
+:root {
+  /* Core palette */
+  --ck-coral: #ff4d4d;
+  --ck-coral-hover: #ff6666;
+  --ck-coral-active: #e63946;
+  --ck-cyan: #32d7ff;
+
+  /* Backgrounds */
+  --ck-bg-base: #090f18;
+  --ck-bg-soft: #121b29;
+  --ck-bg-card: color-mix(in oklab, var(--ck-bg-soft) 85%, #1e2c41);
+  --ck-bg-glass: rgba(18, 27, 41, 0.72);
+  --ck-bg-glass-strong: rgba(18, 27, 41, 0.88);
+
+  /* Toasts */
+  --ck-toast-bg: rgba(18, 27, 41, 0.94);
+  --ck-toast-border: rgba(226, 238, 255, 0.18);
+
+  /* Borders */
+  --ck-border-subtle: rgba(226, 238, 255, 0.10);
+  --ck-border-strong: rgba(226, 238, 255, 0.16);
+
+  /* Text */
+  --ck-text-primary: #eef5ff;
+  --ck-text-secondary: rgba(222, 233, 248, 0.72);
+  --ck-text-tertiary: rgba(222, 233, 248, 0.50);
+
+  /* Accent */
+  --ck-accent-red: var(--ck-coral);
+  --ck-accent-red-hover: var(--ck-coral-hover);
+  --ck-accent-red-active: var(--ck-coral-active);
+
+  /* Focus */
+  --ck-focus-ring: rgba(255, 77, 77, 0.55);
+
+  /* Radii */
+  --ck-radius-sm: 8px;
+  --ck-radius-md: 16px;
+  --ck-radius-lg: 24px;
+
+  /* Elevation */
+  --ck-shadow-1: 0 22px 60px rgba(3, 7, 13, 0.5);
+  --ck-shadow-2: 0 28px 70px rgba(3, 7, 13, 0.6);
+
+  /* Glass */
+  --ck-glass-blur: 18px;
+  --ck-glass-saturation: 1.25;
+
+  /* Legacy */
+  --background: var(--ck-bg-base);
+  --foreground: var(--ck-text-primary);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(900px 540px at 82% -12%, color-mix(in oklab, var(--ck-coral) 18%, transparent), transparent 68%),
+    radial-gradient(900px 540px at 8% -16%, color-mix(in oklab, var(--ck-cyan) 14%, transparent), transparent 70%),
+    linear-gradient(180deg, #060b13 0%, #0a121c 40%, #101b2a 100%);
+  background-attachment: fixed;
+  color: var(--ck-text-primary);
+  font-family: var(--font-geist-sans), "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Universal focus ring */
+:where(a, button, input, textarea, select, summary, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--ck-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Glass surface utility (primary container) */
+.ck-glass {
+  background: var(--ck-bg-glass);
+  border: 1px solid var(--ck-border-subtle);
+  border-radius: var(--ck-radius-md);
+  box-shadow: var(--ck-shadow-1);
+  transition: background-color 160ms ease-out, box-shadow 180ms ease-out, border-color 160ms ease-out;
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .ck-glass {
+    -webkit-backdrop-filter: blur(var(--ck-glass-blur)) saturate(var(--ck-glass-saturation));
+    backdrop-filter: blur(var(--ck-glass-blur)) saturate(var(--ck-glass-saturation));
+  }
+}
+
+/* Glass surface (elevated) */
+.ck-glass-strong {
+  background: var(--ck-bg-glass-strong);
+  border: 1px solid var(--ck-border-strong);
+  border-radius: var(--ck-radius-md);
+  box-shadow: var(--ck-shadow-2);
+  transition: background-color 160ms ease-out, box-shadow 180ms ease-out, border-color 160ms ease-out;
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .ck-glass-strong {
+    -webkit-backdrop-filter: blur(calc(var(--ck-glass-blur) + 4px)) saturate(var(--ck-glass-saturation));
+    backdrop-filter: blur(calc(var(--ck-glass-blur) + 4px)) saturate(var(--ck-glass-saturation));
+  }
+}
+
+/* Card surface (opaque, for grids) */
+.ck-card {
+  background: var(--ck-bg-card);
+  border: 1px solid var(--ck-border-subtle);
+  border-radius: var(--ck-radius-md);
+  box-shadow: var(--ck-shadow-1);
+  transition: background-color 160ms ease-out, border-color 160ms ease-out;
+}
+
+.ck-card:hover {
+  background: color-mix(in oklab, var(--ck-bg-card) 90%, rgba(255, 255, 255, 0.08));
+}
