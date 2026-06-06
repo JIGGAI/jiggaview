@@ -1,0 +1,15 @@
+# JIGGA plugin manifest (type: app) — install with:
+#   jigga plugins install https://github.com/JIGGAI/jiggaview
+# JIGGA fetches, scans, records approval, runs `setup`, and supervises `run`
+# as a per-plugin user service (ai.jigga.plugin.jiggaview) with PORT and
+# JIGGA_HOME in its environment.
+name: jiggaview
+version: 0.1.0
+summary: Web dashboard for your JIGGA runtime — agents, recipes, tasks, runs, settings.
+type: app
+risk_level: medium   # it reads your whole runtime via the jigga CLI
+setup:
+  - ["npm", "ci"]
+  - ["npm", "run", "build"]
+run: ["npx", "next", "start", "-H", "127.0.0.1", "-p", "4400"]
+port: 4400
