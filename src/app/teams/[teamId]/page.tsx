@@ -21,19 +21,22 @@ export default async function TeamPage({
   const { teamId } = await params;
   let team: Record<string, unknown> | null = null;
   let teamAgents: AgentListItem[] = [];
+  let disabled = false;
   let error: string | null = null;
   try {
-    const [teamDoc, allAgents] = await Promise.all([
+    const [teamDoc, allAgents, disabledCfg] = await Promise.all([
       runJiggaJson<Record<string, unknown>>(["team", "get", teamId, "--json"]),
       runJiggaJson<AgentListItem[]>(["agents", "list", "--json"]),
+      runJiggaJson<{ teams?: string[] } | null>(["config", "get", "disabled", "--json"]),
     ]);
     team = teamDoc;
     teamAgents = allAgents.filter((a) => a.team === teamId);
+    disabled = Boolean(disabledCfg?.teams?.includes(teamId));
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
   if (error || !team) {
     return <p className="text-sm text-red-400">{error ?? `No such team: ${teamId}`}</p>;
   }
-  return <TeamEditor teamId={teamId} team={team} teamAgents={teamAgents} />;
+  return <TeamEditor teamId={teamId} team={team} teamAgents={teamAgents} disabled={disabled} />;
 }

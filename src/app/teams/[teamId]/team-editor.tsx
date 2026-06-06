@@ -27,10 +27,12 @@ export default function TeamEditor({
   teamId,
   team,
   teamAgents,
+  disabled,
 }: {
   teamId: string;
   team: Record<string, unknown>;
   teamAgents: AgentListItem[];
+  disabled: boolean;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("agents");
@@ -74,6 +76,25 @@ export default function TeamEditor({
         body: JSON.stringify({ team: teamId, member: memberId, role }),
       });
       note(`Staffed ${memberId} — agent created from the team recipe (now in ~/.jigga/recipes).`);
+      router.refresh();
+    } catch (e) {
+      note(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleDisabled() {
+    setBusy(true);
+    try {
+      await fetchJson("/api/disable", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "team", id: teamId, disabled: !disabled }),
+      });
+      note(disabled
+        ? "Team enabled — the supervisor resumes waking its members next tick."
+        : "Team disabled — members won't be woken; tasks/mail queue and nothing is lost.");
       router.refresh();
     } catch (e) {
       note(e instanceof Error ? e.message : String(e), true);
@@ -249,8 +270,20 @@ export default function TeamEditor({
 
   return (
     <div className="w-full">
-      <h1 className="text-xl font-semibold">{String(team.name ?? teamId)}</h1>
-      <div className="font-mono text-xs text-[color:var(--ck-text-tertiary)]">{teamId}</div>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">
+            {String(team.name ?? teamId)}
+            {disabled ? (
+              <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">disabled</span>
+            ) : null}
+          </h1>
+          <div className="font-mono text-xs text-[color:var(--ck-text-tertiary)]">{teamId}</div>
+        </div>
+        <button className={secondaryBtn} disabled={busy} onClick={() => void toggleDisabled()}>
+          {disabled ? "Enable team" : "Disable team"}
+        </button>
+      </div>
 
       <div className="sticky top-0 z-10 mt-4 flex gap-2 bg-[color:var(--ck-bg-primary)] py-2">
         {tabBtn("agents", "Agents")}

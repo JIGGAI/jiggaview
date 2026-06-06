@@ -34,9 +34,11 @@ function MessageBox({ message, error }: { message: string | null; error: boolean
 export default function AgentEditor({
   agentId,
   agent,
+  disabled,
 }: {
   agentId: string;
   agent: Record<string, unknown>;
+  disabled: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -72,6 +74,26 @@ export default function AgentEditor({
   const [fileName, setFileName] = useState("SOUL.md");
   const [fileContent, setFileContent] = useState("");
   const [fileError, setFileError] = useState<string | null>(null);
+
+  async function toggleDisabled() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await fetchJson("/api/disable", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "agent", id: agentId, disabled: !disabled }),
+      });
+      setIsError(false);
+      setMessage(disabled ? "Agent enabled." : "Agent disabled — the supervisor won't wake it; tasks queue, nothing is lost.");
+      router.refresh();
+    } catch (e) {
+      setIsError(true);
+      setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function setKeys(pairs: Array<[string, string]>, okMessage: string) {
     setBusy(true);
@@ -176,7 +198,17 @@ export default function AgentEditor({
           <h1 className="mt-1 text-xl font-semibold">{name || agentId}</h1>
           <div className="font-mono text-xs text-[color:var(--ck-text-tertiary)]">{agentId}</div>
         </div>
-        <div className="text-right text-xs text-[color:var(--ck-text-tertiary)]">Agent: {agentId}</div>
+        <div className="flex flex-col items-end gap-2">
+          <div className="text-right text-xs text-[color:var(--ck-text-tertiary)]">
+            Agent: {agentId}
+            {disabled ? (
+              <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">disabled</span>
+            ) : null}
+          </div>
+          <button className={secondaryBtn} disabled={busy} onClick={() => void toggleDisabled()}>
+            {disabled ? "Enable agent" : "Disable agent"}
+          </button>
+        </div>
       </div>
 
       <div className="sticky top-0 z-10 mt-4 flex gap-2 bg-[color:var(--ck-bg-primary)] py-2">
