@@ -6,7 +6,7 @@ import { ConfirmationModal } from "@/components/ConfirmationModal";
 import { Modal } from "@/components/Modal";
 import { fetchJson } from "@/lib/fetch-json";
 import type { InstalledRecord, PendingPaths, Recipe } from "./page";
-import { parseRecipeFrontmatter, RecipeInfoPanel, RecipeChangeDiff } from "./recipe-editor-panel";
+import { normalizeRecipe, parseRecipeFrontmatter, RecipeInfoPanel, RecipeChangeDiff } from "./recipe-editor-panel";
 
 function FileList({ paths }: { paths: string[] }) {
   if (!paths.length) return null;
@@ -53,9 +53,14 @@ function RecipeDefaultDiff({ defaultContent, current, busy }: { defaultContent: 
       <p className="mb-2 text-xs text-[color:var(--ck-text-tertiary)]">
         <span className="text-red-300">− default (released)</span> vs{" "}
         <span className="text-emerald-300">+ your recipe</span>. Pull anything you want from the default into your copy on
-        the <strong>Edit</strong> tab, then Save.
+        the <strong>Edit</strong> tab, then Save. <span className="italic">Formatting &amp; key order normalized;
+        frontmatter comments not shown.</span>
       </p>
-      <RecipeChangeDiff original={defaultContent} draft={current} emptyLabel="Your recipe is identical to the default." />
+      <RecipeChangeDiff
+        original={normalizeRecipe(defaultContent)}
+        draft={normalizeRecipe(current)}
+        emptyLabel="Your recipe matches the default (ignoring formatting)."
+      />
     </div>
   );
 }
