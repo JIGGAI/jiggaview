@@ -13,9 +13,28 @@ function recipeStem(source: string): string {
   return file.replace(/\.md$/, "");
 }
 
-function scaffoldLabel(recipe: Recipe, busyId: string | null): string {
-  if (busyId === recipe.id) return "Scaffolding…";
-  return recipe.installed ? "Sync (safe re-scaffold)" : "Install";
+const BTN = "rounded-lg bg-white/10 px-3 py-1.5 text-sm font-medium hover:bg-white/15 disabled:opacity-50";
+
+function DriftStatus({ record }: { record: InstalledRecord | undefined }) {
+  const modified = record?.modified?.length ?? 0;
+  const missing = record?.missing?.length ?? 0;
+  if (modified + missing === 0) return null;
+  const parts: React.ReactNode[] = [];
+  if (missing) {
+    parts.push(
+      <span key="missing">
+        {missing} missing — <strong>Repair</strong> recreates {missing === 1 ? "it" : "them"}.{" "}
+      </span>,
+    );
+  }
+  if (modified) {
+    parts.push(
+      <span key="edited">
+        {modified} locally edited — kept; <code>jigga update</code>’s picker overwrites only if you choose.
+      </span>,
+    );
+  }
+  return <p className="mt-2 text-xs text-amber-400">{parts}</p>;
 }
 
 function RecipeCard({
@@ -25,6 +44,7 @@ function RecipeCard({
   busy,
   onEdit,
   onScaffold,
+  onApply,
   onDelete,
 }: {
   recipe: Recipe;
@@ -33,28 +53,10 @@ function RecipeCard({
   busy: string | null;
   onEdit: (r: Recipe) => void;
   onScaffold: (r: Recipe) => void;
+  onApply: () => void;
   onDelete: (r: Recipe) => void;
 }) {
-  const drift = (record?.modified?.length ?? 0) + (record?.missing?.length ?? 0);
-
-  let status: React.ReactNode = null;
-  if (isPending) {
-    status = (
-      <p className="mt-2 text-xs text-amber-400">
-        Edited but not applied — run <code>jigga update</code> (Apply, above) to sync the running system.
-      </p>
-    );
-  } else if (record && drift > 0) {
-    status = (
-      <p className="mt-2 text-xs text-amber-400">
-        {record.modified?.length ? `${record.modified.length} locally edited` : null}
-        {record.modified?.length && record.missing?.length ? " · " : null}
-        {record.missing?.length ? `${record.missing.length} missing` : null}
-        {" — reconcile with "}
-        <code>jigga update</code>
-      </p>
-    );
-  }
+  const hasMissing = (record?.missing?.length ?? 0) > 0;
 
   return (
     <li
@@ -81,31 +83,86 @@ function RecipeCard({
       {recipe.description ? (
         <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">{recipe.description}</p>
       ) : null}
-      {status}
-      <div className="mt-auto flex flex-wrap gap-2 pt-3">
-        <button
-          className="rounded-lg bg-white/10 px-3 py-1.5 text-sm font-medium hover:bg-white/15 disabled:opacity-50"
-          disabled={busy !== null}
-          onClick={() => onEdit(recipe)}
-        >
-          Edit
+      {isPending ? (
+        <p className="mt-2 text-xs text-amber-400">
+          Edited but not applied — <strong>Apply</strong> to reconcile the running system (and restart the supervisor).
+        </p>
+      ) : (
+        <DriftStatus record={record} />
+      )}
+      <CardActions
+        recipe={recipe}
+        isPending={isPending}
+        hasMissing={hasMissing}
+        busy={busy}
+        onEdit={onEdit}
+        onScaffold={onScaffold}
+        onApply={onApply}
+        onDelete={onDelete}
+      />
+    </li>
+  );
+}
+
+function CardActions({
+  recipe,
+  isPending,
+  hasMissing,
+  busy,
+  onEdit,
+  onScaffold,
+  onApply,
+  onDelete,
+}: {
+  recipe: Recipe;
+  isPending: boolean;
+  hasMissing: boolean;
+  busy: string | null;
+  onEdit: (r: Recipe) => void;
+  onScaffold: (r: Recipe) => void;
+  onApply: () => void;
+  onDelete: (r: Recipe) => void;
+}) {
+  const disabled = busy !== null;
+  return (
+    <div className="mt-auto flex flex-wrap gap-2 pt-3">
+      <button className={BTN} disabled={disabled} onClick={() => onEdit(recipe)}>
+        Edit
+      </button>
+
+      {!recipe.installed ? (
+        <button className={BTN} disabled={disabled} onClick={() => onScaffold(recipe)} title="Scaffold this recipe (agents, team, workflows, workspace)">
+          {busy === recipe.id ? "Installing…" : "Install"}
         </button>
+      ) : null}
+
+      {recipe.installed && isPending ? (
         <button
-          className="rounded-lg bg-white/10 px-3 py-1.5 text-sm font-medium hover:bg-white/15 disabled:opacity-50"
-          disabled={busy !== null}
-          onClick={() => onScaffold(recipe)}
+          className="rounded-lg bg-amber-500/80 px-3 py-1.5 text-sm font-medium text-amber-950 hover:bg-amber-400 disabled:opacity-50"
+          disabled={disabled}
+          onClick={onApply}
+          title="jigga update --apply: reconcile every recipe + restart the supervisor"
         >
-          {scaffoldLabel(recipe, busy)}
+          {busy === "__apply__" ? "Applying…" : "Apply"}
         </button>
+      ) : null}
+
+      {recipe.installed && !isPending && hasMissing ? (
+        <button className={BTN} disabled={disabled} onClick={() => onScaffold(recipe)} title="Re-scaffold this recipe to recreate missing files (never overwrites your edits)">
+          {busy === recipe.id ? "Repairing…" : "Repair"}
+        </button>
+      ) : null}
+
+      {recipe.installed ? (
         <button
           className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-200 hover:bg-red-500/20 disabled:opacity-50"
-          disabled={busy !== null}
+          disabled={disabled}
           onClick={() => onDelete(recipe)}
         >
           Delete
         </button>
-      </div>
-    </li>
+      ) : null}
+    </div>
   );
 }
 
@@ -272,6 +329,7 @@ export default function RecipesClient({
             busy={busy}
             onEdit={(r) => void openEditor(r)}
             onScaffold={(r) => void scaffold(r)}
+            onApply={() => void applyUpdate()}
             onDelete={(r) => setDeleting(r)}
           />
         ))}
