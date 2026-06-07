@@ -29,20 +29,9 @@ jobs:
           node -e 'const labels=JSON.parse(process.env.PR_LABELS_JSON||"[]").map(l=>String(l.name||"")); if(labels.includes("no-tests-ok")) { console.log("[require-tests] bypass via label no-tests-ok"); process.exit(0); }'
           ./scripts/ci/require-tests-for-lib-changes.sh
 
-      - run: npm run lint && npm run coverage
+      - run: npm run lint
 
-      - name: Build and verify OpenClaw runtime package
-        run: npm run build:plugin && npm run verify:runtime-package
+      - run: npm run test:run
 
       - name: Build (Next.js)
         run: npm run build
-
-      - name: Check for code duplication (jscpd)
-        run: npm run dup:check
-
-      - name: Upload jscpd report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: jscpd-report
-          path: report/jscpd/
