@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchJson } from "@/lib/fetch-json";
 import type { ChatEntry } from "@/app/api/chat/route";
+import type { Conversation } from "@/app/api/conversations/route";
 
 /** Chat — the browser as a JIGGA channel (webchat, M2 + multi-agent).
  *
@@ -52,13 +53,21 @@ function AgentRail({
   agents,
   selected,
   onSelect,
+  threads,
+  selectedThread,
+  onSelectThread,
+  onNewThread,
 }: {
   agents: Agent[];
   selected: string;
   onSelect: (id: string) => void;
+  threads: Conversation[];
+  selectedThread: string;
+  onSelectThread: (id: string) => void;
+  onNewThread: () => void;
 }) {
   return (
-    <div className="w-52 shrink-0 overflow-y-auto border-r border-[color:var(--ck-border-subtle)] p-2">
+    <div className="w-56 shrink-0 overflow-y-auto border-r border-[color:var(--ck-border-subtle)] p-2">
       <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">
         Agents
       </div>
@@ -86,6 +95,38 @@ function AgentRail({
           </button>
         );
       })}
+      <div className="mt-3 flex items-center justify-between border-t border-[color:var(--ck-border-subtle)] px-2 pb-1 pt-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">
+          Threads
+        </span>
+        <button
+          onClick={onNewThread}
+          title="Start a new conversation with this agent"
+          className="rounded px-2 text-sm text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+        >
+          +
+        </button>
+      </div>
+      {threads.map((t) => {
+        const active = t.conversation_id === selectedThread;
+        return (
+          <button
+            key={t.conversation_id}
+            onClick={() => onSelectThread(t.conversation_id)}
+            className={
+              "mb-1 block w-full rounded-lg px-3 py-1.5 text-left transition-colors " +
+              (active
+                ? "bg-white/10 text-[color:var(--ck-text-primary)]"
+                : "text-[color:var(--ck-text-secondary)] hover:bg-white/5")
+            }
+          >
+            <div className="truncate text-xs font-medium">{t.conversation_id}</div>
+            <div className="truncate text-[10px] text-[color:var(--ck-text-tertiary)]">
+              {t.last_text || "(empty)"}
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -93,6 +134,8 @@ function AgentRail({
 export default function ChatPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selected, setSelected] = useState<string>("");   // agent id; "" until roster loads
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedThread, setSelectedThread] = useState<string>(""); // "" = the agent's primary thread
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -101,8 +144,43 @@ export default function ChatPage() {
   const sendingRef = useRef(false);
 
   const current = agents.find((a) => a.id === selected);
-  // The default agent's thread is `web`; everyone else's thread is their id.
-  const conversation = current?.isDefault ? DEFAULT_THREAD : selected || DEFAULT_THREAD;
+  // The default agent's primary thread is `web` (pre-picker history lives
+  // there); everyone else's primary thread is their id.
+  const primaryThread = current?.isDefault ? DEFAULT_THREAD : selected || DEFAULT_THREAD;
+  const conversation = selectedThread || primaryThread;
+  // This agent's threads: its primary first (synthesized if it has no
+  // messages yet), then every conversation targeted at it, newest first.
+  const agentThreads: Conversation[] = (() => {
+    const mine = conversations.filter(
+      (c) =>
+        c.conversation_id !== primaryThread &&
+        (c.agent === selected || (current?.isDefault && c.agent === null))
+    );
+    const primary = conversations.find((c) => c.conversation_id === primaryThread) ?? {
+      conversation_id: primaryThread,
+      agent: current?.isDefault ? null : selected,
+      count: 0,
+      last_ts: "",
+      last_text: "",
+      last_sender: "",
+    };
+    return [primary, ...mine];
+  })();
+
+  const refreshConversations = useCallback(async () => {
+    try {
+      const json = await fetchJson<{ conversations?: Conversation[] }>("/api/conversations", {
+        cache: "no-store",
+      });
+      setConversations(json.conversations ?? []);
+    } catch {
+      /* thread list is an enhancement — keep the last good one */
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshConversations();
+  }, [refreshConversations]);
 
   useEffect(() => {
     (async () => {
@@ -167,9 +245,10 @@ export default function ChatPage() {
         body: JSON.stringify({
           text,
           conversation,
-          // The default agent answers the default thread without targeting;
-          // every other agent is addressed explicitly.
-          agent: current.isDefault ? "" : current.id,
+          // The default agent answers its classic `web` thread untargeted
+          // (back-compat); every other thread is addressed explicitly so
+          // routing + thread attribution work.
+          agent: current.isDefault && conversation === DEFAULT_THREAD ? "" : current.id,
         }),
       });
       setEntries((prev) => [
@@ -183,6 +262,7 @@ export default function ChatPage() {
       sendingRef.current = false;
       setSending(false);
       refresh();
+      refreshConversations();
     }
   }
 
@@ -196,7 +276,20 @@ export default function ChatPage() {
         </p>
       </div>
       <div className="mt-4 flex min-h-0 flex-1 rounded-xl border border-[color:var(--ck-border-subtle)]">
-        <AgentRail agents={agents} selected={selected} onSelect={setSelected} />
+        <AgentRail
+          agents={agents}
+          selected={selected}
+          onSelect={(id) => {
+            setSelected(id);
+            setSelectedThread("");   // back to the new agent's primary thread
+          }}
+          threads={agentThreads}
+          selectedThread={conversation}
+          onSelectThread={setSelectedThread}
+          onNewThread={() =>
+            setSelectedThread(`${selected || "web"}-${Math.random().toString(36).slice(2, 7)}`)
+          }
+        />
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex-1 space-y-3 overflow-y-auto p-4">
             {entries.length === 0 && !sending ? (
