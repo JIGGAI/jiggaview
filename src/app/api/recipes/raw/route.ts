@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { runJigga } from "@/lib/jigga-cli";
 
-/** GET ?name= → raw recipe markdown; PUT {name, content} → `jigga recipes
- * save` (user dir overrides bundled; validated + rolled back in core). */
+/** GET ?name=[&bundled=1] → raw recipe markdown (your copy, or the shipped
+ * default with bundled=1 — for diffing against a new release);
+ * PUT {name, content} → `jigga recipes save` (user dir overrides bundled;
+ * validated + rolled back in core). */
 export async function GET(request: Request) {
-  const name = (new URL(request.url).searchParams.get("name") ?? "").trim();
+  const url = new URL(request.url);
+  const name = (url.searchParams.get("name") ?? "").trim();
+  const bundled = url.searchParams.get("bundled") === "1";
   if (!name || name.startsWith("-")) {
     return NextResponse.json({ ok: false, error: "name required" }, { status: 400 });
   }
-  const res = await runJigga(["recipes", "cat", name]);
+  const res = await runJigga(["recipes", "cat", name, ...(bundled ? ["--bundled"] : [])]);
   if (!res.ok) return NextResponse.json({ ok: false, error: res.stdout.trim() || res.stderr.trim() }, { status: 404 });
   return NextResponse.json({ ok: true, content: res.stdout });
 }

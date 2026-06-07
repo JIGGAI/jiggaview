@@ -17,28 +17,160 @@ function FileList({ paths }: { paths: string[] }) {
   );
 }
 
-type DriftItem = { path: string; kind: "pending" | "edited"; before: string; after: string };
-
-/** Per-artifact before/after diffs of what differs vs the running system —
- * shown in the editor regardless of unsaved edits, so the actual change behind
- * a card's "pending" / "locally edited" line is always visible. */
-function DriftDiffs({ items }: { items: DriftItem[] }) {
-  if (!items.length) return null;
+function EditorTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <div className="mt-3 space-y-3">
-      <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">What differs from the running system</div>
-      {items.map((it) => (
-        <div key={`${it.kind}:${it.path}`} className="rounded-lg border border-white/10 bg-white/5 p-2">
-          <div className="mb-1 text-xs">
-            <span className="font-mono text-[color:var(--ck-text-secondary)]">{it.path}</span>{" "}
-            <span className="text-[color:var(--ck-text-tertiary)]">
-              — {it.kind === "pending" ? "live file → what Apply will write" : "your edit → what the recipe generates (update picker)"}
-            </span>
-          </div>
-          <RecipeChangeDiff original={it.before} draft={it.after} />
-        </div>
-      ))}
+    <button
+      type="button"
+      onClick={onClick}
+      className={`-mb-px border-b-2 px-3 py-1.5 font-medium ${
+        active
+          ? "border-[color:var(--ck-text-primary)] text-[color:var(--ck-text-primary)]"
+          : "border-transparent text-[color:var(--ck-text-tertiary)] hover:text-[color:var(--ck-text-secondary)]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Diff tab: your installed recipe vs the shipped default (`recipes cat
+ * --bundled`). Read-only — when a release changes a default you see exactly
+ * what differs and fold it into your copy by hand on the Edit tab. */
+function RecipeDefaultDiff({ defaultContent, current, busy }: { defaultContent: string | null; current: string; busy: boolean }) {
+  if (busy) {
+    return <p className="text-xs text-[color:var(--ck-text-tertiary)]">Loading…</p>;
+  }
+  if (defaultContent === null) {
+    return (
+      <p className="text-xs text-[color:var(--ck-text-tertiary)]">
+        No shipped default to compare — this recipe has no bundled version (it&apos;s your own), or your installed jigga
+        predates <code>recipes cat --bundled</code>.
+      </p>
+    );
+  }
+  return (
+    <div>
+      <p className="mb-2 text-xs text-[color:var(--ck-text-tertiary)]">
+        <span className="text-red-300">− default (released)</span> vs{" "}
+        <span className="text-emerald-300">+ your recipe</span>. Pull anything you want from the default into your copy on
+        the <strong>Edit</strong> tab, then Save.
+      </p>
+      <RecipeChangeDiff original={defaultContent} draft={current} emptyLabel="Your recipe is identical to the default." />
     </div>
+  );
+}
+
+function RecipeEditorModal({
+  recipe,
+  draft,
+  setDraft,
+  original,
+  dirty,
+  parsed,
+  busy,
+  error,
+  defaultContent,
+  tab,
+  setTab,
+  pendingFiles,
+  modified,
+  onClose,
+  onSave,
+}: {
+  recipe: Recipe | null;
+  draft: string;
+  setDraft: (v: string) => void;
+  original: string;
+  dirty: boolean;
+  parsed: { fm: ReturnType<typeof parseRecipeFrontmatter>["fm"]; error?: string };
+  busy: boolean;
+  error: string | null;
+  defaultContent: string | null;
+  tab: "edit" | "diff";
+  setTab: (t: "edit" | "diff") => void;
+  pendingFiles: string[];
+  modified: string[];
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const defaultDiffers = defaultContent !== null && defaultContent !== original;
+  return (
+    <Modal open={recipe !== null} onClose={onClose} title={recipe ? `Edit recipe: ${recipe.name}` : "Edit recipe"} size="full">
+      <div className="text-xs text-[color:var(--ck-text-tertiary)]">
+        {recipe ? <>{recipe.kind} · <span className="font-mono">{recipeStem(recipe.source)}</span> · <span className="font-mono">{recipe.source}</span></> : null}
+      </div>
+      <div className="mt-3 flex gap-1 border-b border-white/10 text-sm">
+        <EditorTab active={tab === "edit"} onClick={() => setTab("edit")}>Edit</EditorTab>
+        <EditorTab active={tab === "diff"} onClick={() => setTab("diff")}>
+          Diff vs default{defaultDiffers ? " •" : ""}
+        </EditorTab>
+      </div>
+
+      {tab === "edit" ? (
+        <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="flex flex-col">
+            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Recipe markdown</div>
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              spellCheck={false}
+              disabled={busy}
+              placeholder={busy ? "Loading…" : ""}
+              className="mt-2 h-[52vh] w-full resize-none rounded-lg border border-white/10 bg-white/5 p-3 font-mono text-xs text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)]"
+            />
+            <div className="mt-3">
+              <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Your unsaved edits</div>
+              <div className="mt-2">
+                {dirty ? (
+                  <RecipeChangeDiff original={original} draft={draft} />
+                ) : (
+                  <EditorEmptyChanges pendingFiles={pendingFiles} modified={modified} />
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col">
+            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Preview (from frontmatter)</div>
+            <div className="mt-2 max-h-[78vh] overflow-auto pr-1">
+              <RecipeInfoPanel fm={parsed.fm} error={parsed.error} />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3">
+          <RecipeDefaultDiff defaultContent={defaultContent} current={draft} busy={busy} />
+        </div>
+      )}
+      {error ? (
+        <div className="mt-3 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">{error}</div>
+      ) : null}
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <span className={`text-xs ${dirty ? "text-amber-300" : "text-[color:var(--ck-text-tertiary)]"}`}>
+          {dirty ? "Unsaved changes" : "No changes"}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!dirty || busy}
+            onClick={onSave}
+            className="rounded-lg bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] hover:bg-[var(--ck-accent-red-hover)] disabled:opacity-50"
+          >
+            {busy ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+      <p className="mt-3 text-xs text-[color:var(--ck-text-tertiary)]">
+        Save writes your copy to <code>~/.jigga/recipes</code> (overrides the bundled default). Then click{" "}
+        <strong>Apply</strong> on the recipe&apos;s card to re-scaffold it (this recipe only).
+      </p>
+    </Modal>
   );
 }
 
@@ -240,7 +372,10 @@ export default function RecipesClient({
   const [original, setOriginal] = useState("");
   const [editorBusy, setEditorBusy] = useState(false);
   const [editorError, setEditorError] = useState<string | null>(null);
-  const [driftItems, setDriftItems] = useState<DriftItem[]>([]);
+  // The shipped default for this recipe (via `recipes cat --bundled`), for the
+  // Diff tab. null = no default / older jigga without the flag.
+  const [defaultContent, setDefaultContent] = useState<string | null>(null);
+  const [editorTab, setEditorTab] = useState<"edit" | "diff">("edit");
 
   const byRecipeId = new Map(installed.map((r) => [r.recipe_id, r]));
   const pendingSet = new Set(Object.keys(pendingPaths).filter((id) => (pendingPaths[id] ?? []).length > 0));
@@ -253,21 +388,20 @@ export default function RecipesClient({
     setEditing(recipe);
     setDraft("");
     setOriginal("");
-    setDriftItems([]);
+    setDefaultContent(null);
+    setEditorTab("edit");
     setEditorError(null);
     setEditorBusy(true);
+    const stem = recipeStem(recipe.source);
     try {
-      // Markdown + drift in parallel; drift is best-effort context (what
-      // differs vs the running system) and must not block opening the editor.
-      const [rawRes, driftRes] = await Promise.allSettled([
-        fetchJson<{ content?: string }>(
-          `/api/recipes/raw?name=${encodeURIComponent(recipeStem(recipe.source))}`,
-          { cache: "no-store" },
-        ),
-        fetchJson<{ items?: DriftItem[] }>(
-          `/api/recipes/drift?recipe=${encodeURIComponent(recipe.id)}`,
-          { cache: "no-store" },
-        ),
+      // Your copy + the shipped default in parallel; the default is best-effort
+      // (no bundled version, or an older jigga without --bundled) and must not
+      // block opening the editor.
+      const [rawRes, defRes] = await Promise.allSettled([
+        fetchJson<{ content?: string }>(`/api/recipes/raw?name=${encodeURIComponent(stem)}`, { cache: "no-store" }),
+        fetchJson<{ content?: string }>(`/api/recipes/raw?name=${encodeURIComponent(stem)}&bundled=1`, {
+          cache: "no-store",
+        }),
       ]);
       if (rawRes.status === "fulfilled") {
         const content = rawRes.value.content ?? "";
@@ -276,7 +410,7 @@ export default function RecipesClient({
       } else {
         setEditorError(rawRes.reason instanceof Error ? rawRes.reason.message : String(rawRes.reason));
       }
-      if (driftRes.status === "fulfilled") setDriftItems(driftRes.value.items ?? []);
+      setDefaultContent(defRes.status === "fulfilled" ? defRes.value.content ?? null : null);
     } finally {
       setEditorBusy(false);
     }
@@ -286,6 +420,8 @@ export default function RecipesClient({
     setEditing(null);
     setDraft("");
     setOriginal("");
+    setDefaultContent(null);
+    setEditorTab("edit");
     setEditorError(null);
   }
 
@@ -402,73 +538,23 @@ export default function RecipesClient({
         ))}
       </ul>
 
-      <Modal open={editing !== null} onClose={closeEditor} title={editing ? `Edit recipe: ${editing.name}` : "Edit recipe"} size="full">
-        <div className="text-xs text-[color:var(--ck-text-tertiary)]">
-          {editing ? <>{editing.kind} · <span className="font-mono">{recipeStem(editing.source)}</span> · <span className="font-mono">{editing.source}</span></> : null}
-        </div>
-        <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="flex flex-col">
-            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Recipe markdown</div>
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              spellCheck={false}
-              disabled={editorBusy}
-              placeholder={editorBusy ? "Loading…" : ""}
-              className="mt-2 h-[52vh] w-full resize-none rounded-lg border border-white/10 bg-white/5 p-3 font-mono text-xs text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)]"
-            />
-            <div className="mt-3">
-              <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Your unsaved edits</div>
-              <div className="mt-2">
-                {dirty ? (
-                  <RecipeChangeDiff original={original} draft={draft} />
-                ) : (
-                  <EditorEmptyChanges pendingFiles={editingPending} modified={editingModified} />
-                )}
-              </div>
-              <DriftDiffs items={driftItems} />
-            </div>
-          </div>
-          <div className="flex flex-col">
-            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Preview (from frontmatter)</div>
-            <div className="mt-2 max-h-[78vh] overflow-auto pr-1">
-              <RecipeInfoPanel fm={parsed.fm} error={parsed.error} />
-            </div>
-          </div>
-        </div>
-        {editorError ? (
-          <div className="mt-3 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">
-            {editorError}
-          </div>
-        ) : null}
-        <div className="mt-4 flex items-center justify-between gap-2">
-          <span className={`text-xs ${dirty ? "text-amber-300" : "text-[color:var(--ck-text-tertiary)]"}`}>
-            {dirty ? "Unsaved changes" : "No changes"}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={closeEditor}
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!dirty || editorBusy}
-              onClick={() => void saveEditor()}
-              className="rounded-lg bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] hover:bg-[var(--ck-accent-red-hover)] disabled:opacity-50"
-            >
-              {editorBusy ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </div>
-        <p className="mt-3 text-xs text-[color:var(--ck-text-tertiary)]">
-          Save writes your copy to <code>~/.jigga/recipes</code> (overrides the bundled version). Then click{" "}
-          <strong>Apply</strong> on the recipes page to run <code>jigga update</code> and fold the change into the
-          running system.
-        </p>
-      </Modal>
+      <RecipeEditorModal
+        recipe={editing}
+        draft={draft}
+        setDraft={setDraft}
+        original={original}
+        dirty={dirty}
+        parsed={parsed}
+        busy={editorBusy}
+        error={editorError}
+        defaultContent={defaultContent}
+        tab={editorTab}
+        setTab={setEditorTab}
+        pendingFiles={editingPending}
+        modified={editingModified}
+        onClose={closeEditor}
+        onSave={() => void saveEditor()}
+      />
 
       {deleting ? (
         <ConfirmationModal
