@@ -24,8 +24,10 @@ export type InstalledRecord = {
 };
 
 type UpdatePlan = {
-  actions?: Array<{ kind?: string; detail?: { record?: string } }>;
+  actions?: Array<{ kind?: string; detail?: { record?: string; path?: string } }>;
 };
+
+export type PendingPaths = Record<string, string[]>;
 
 /** Recipes whose saved markdown no longer matches the live runtime AND that
  * `jigga update --apply` can reconcile non-interactively — i.e. a recipe edit
@@ -37,24 +39,32 @@ type UpdatePlan = {
  * after install). Those are surfaced by the existing "N locally edited" drift
  * line and `--apply` intentionally leaves them alone — so flagging them here
  * would promise an Apply that does nothing. */
-function pendingRecipeIds(recipes: Recipe[], installed: InstalledRecord[], plan: UpdatePlan): string[] {
-  const pendingScaffolds = new Set<string>();
+function pendingRecipePaths(recipes: Recipe[], installed: InstalledRecord[], plan: UpdatePlan): PendingPaths {
+  // scaffold_id -> the artifact paths Apply would write for it
+  const pathsByScaffold = new Map<string, Set<string>>();
   for (const a of plan.actions ?? []) {
-    if (String(a.kind ?? "").startsWith("artifact.") && a.detail?.record) {
-      pendingScaffolds.add(String(a.detail.record));
+    const record = a.detail?.record;
+    if (String(a.kind ?? "").startsWith("artifact.") && record) {
+      const set = pathsByScaffold.get(record) ?? new Set<string>();
+      if (a.detail?.path) set.add(String(a.detail.path));
+      pathsByScaffold.set(record, set);
     }
   }
-  const pendingRecipes = new Set<string>();
+  const recipeIds = new Set(recipes.map((r) => r.id));
+  const out: PendingPaths = {};
   for (const r of installed) {
-    if (pendingScaffolds.has(r.scaffold_id) && r.recipe_id) pendingRecipes.add(r.recipe_id);
+    const paths = pathsByScaffold.get(r.scaffold_id);
+    if (paths && r.recipe_id && recipeIds.has(r.recipe_id)) {
+      out[r.recipe_id] = [...new Set([...(out[r.recipe_id] ?? []), ...paths])].sort();
+    }
   }
-  return recipes.filter((r) => pendingRecipes.has(r.id)).map((r) => r.id);
+  return out;
 }
 
 export default async function RecipesPage() {
   let recipes: Recipe[] = [];
   let installed: InstalledRecord[] = [];
-  let pending: string[] = [];
+  let pendingPaths: PendingPaths = {};
   let error: string | null = null;
   try {
     const [recipesList, installedList, plan] = await Promise.all([
@@ -66,7 +76,7 @@ export default async function RecipesPage() {
     ]);
     recipes = recipesList;
     installed = installedList;
-    pending = pendingRecipeIds(recipes, installed, plan);
+    pendingPaths = pendingRecipePaths(recipes, installed, plan);
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
@@ -78,7 +88,7 @@ export default async function RecipesPage() {
         Scaffoldable agent &amp; team templates — JIGGA&apos;s install format.
       </p>
       {error ? <p className="mt-4 text-sm text-red-400">{error}</p> : null}
-      <RecipesClient recipes={recipes} installed={installed} pending={pending} />
+      <RecipesClient recipes={recipes} installed={installed} pendingPaths={pendingPaths} />
     </div>
   );
 }

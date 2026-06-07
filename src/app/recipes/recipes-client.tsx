@@ -5,8 +5,40 @@ import { useRouter } from "next/navigation";
 import { ConfirmationModal } from "@/components/ConfirmationModal";
 import { Modal } from "@/components/Modal";
 import { fetchJson } from "@/lib/fetch-json";
-import type { InstalledRecord, Recipe } from "./page";
+import type { InstalledRecord, PendingPaths, Recipe } from "./page";
 import { parseRecipeFrontmatter, RecipeInfoPanel, RecipeChangeDiff } from "./recipe-editor-panel";
+
+function FileList({ paths }: { paths: string[] }) {
+  if (!paths.length) return null;
+  return (
+    <span className="font-mono">
+      {paths.map((p) => p.split("/").pop()).join(", ")}
+    </span>
+  );
+}
+
+/** Shown in the editor's change panel when the markdown buffer is unedited.
+ * Explains that this panel is about RECIPE edits, and disambiguates it from the
+ * card's drift (which is about generated files / deployment, not the recipe). */
+function EditorEmptyChanges({ pendingFiles, modified }: { pendingFiles: string[]; modified: string[] }) {
+  return (
+    <div className="space-y-2 text-xs text-[color:var(--ck-text-tertiary)]">
+      <p>No unsaved edits — your changes to the recipe markdown will appear here as you type.</p>
+      {pendingFiles.length ? (
+        <p className="text-amber-400">
+          Heads up: this recipe already differs from the running system (<FileList paths={pendingFiles} />). That&apos;s a
+          deployment gap — close this and click <strong>Apply</strong> on the card to deploy it.
+        </p>
+      ) : null}
+      {modified.length ? (
+        <p className="text-amber-400">
+          Heads up: a generated file was edited outside this recipe (<FileList paths={modified} />). Editing the recipe
+          here won&apos;t change that file — <code>jigga update</code>’s picker does.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function recipeStem(source: string): string {
   const file = source.split("/").pop() ?? source;
@@ -16,31 +48,30 @@ function recipeStem(source: string): string {
 const BTN = "rounded-lg bg-white/10 px-3 py-1.5 text-sm font-medium hover:bg-white/15 disabled:opacity-50";
 
 function DriftStatus({ record }: { record: InstalledRecord | undefined }) {
-  const modified = record?.modified?.length ?? 0;
-  const missing = record?.missing?.length ?? 0;
-  if (modified + missing === 0) return null;
-  const parts: React.ReactNode[] = [];
-  if (missing) {
-    parts.push(
-      <span key="missing">
-        {missing} missing — <strong>Repair</strong> recreates {missing === 1 ? "it" : "them"}.{" "}
-      </span>,
-    );
-  }
-  if (modified) {
-    parts.push(
-      <span key="edited">
-        {modified} locally edited — kept; <code>jigga update</code>’s picker overwrites only if you choose.
-      </span>,
-    );
-  }
-  return <p className="mt-2 text-xs text-amber-400">{parts}</p>;
+  const modified = record?.modified ?? [];
+  const missing = record?.missing ?? [];
+  if (modified.length + missing.length === 0) return null;
+  return (
+    <div className="mt-2 space-y-1 text-xs text-amber-400">
+      {missing.length ? (
+        <p>
+          Missing: <FileList paths={missing} /> — <strong>Repair</strong> recreates {missing.length === 1 ? "it" : "them"}.
+        </p>
+      ) : null}
+      {modified.length ? (
+        <p>
+          Locally edited (a generated file, not the recipe): <FileList paths={modified} /> — kept;{" "}
+          <code>jigga update</code>’s picker overwrites only if you choose.
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function RecipeCard({
   recipe,
   record,
-  isPending,
+  pendingFiles,
   busy,
   onEdit,
   onScaffold,
@@ -49,13 +80,14 @@ function RecipeCard({
 }: {
   recipe: Recipe;
   record: InstalledRecord | undefined;
-  isPending: boolean;
+  pendingFiles: string[];
   busy: string | null;
   onEdit: (r: Recipe) => void;
   onScaffold: (r: Recipe) => void;
   onApply: () => void;
   onDelete: (r: Recipe) => void;
 }) {
+  const isPending = pendingFiles.length > 0;
   const hasMissing = (record?.missing?.length ?? 0) > 0;
 
   return (
@@ -85,7 +117,8 @@ function RecipeCard({
       ) : null}
       {isPending ? (
         <p className="mt-2 text-xs text-amber-400">
-          Edited but not applied — <strong>Apply</strong> to reconcile the running system (and restart the supervisor).
+          Recipe differs from the running system — <strong>Apply</strong> updates <FileList paths={pendingFiles} /> and
+          restarts the supervisor.
         </p>
       ) : (
         <DriftStatus record={record} />
@@ -169,11 +202,11 @@ function CardActions({
 export default function RecipesClient({
   recipes,
   installed,
-  pending,
+  pendingPaths,
 }: {
   recipes: Recipe[];
   installed: InstalledRecord[];
-  pending: string[];
+  pendingPaths: PendingPaths;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -189,9 +222,11 @@ export default function RecipesClient({
   const [editorError, setEditorError] = useState<string | null>(null);
 
   const byRecipeId = new Map(installed.map((r) => [r.recipe_id, r]));
-  const pendingSet = new Set(pending);
+  const pendingSet = new Set(Object.keys(pendingPaths).filter((id) => (pendingPaths[id] ?? []).length > 0));
   const dirty = draft !== original;
   const parsed = useMemo(() => parseRecipeFrontmatter(draft), [draft]);
+  const editingPending = editing ? pendingPaths[editing.id] ?? [] : [];
+  const editingModified = editing ? byRecipeId.get(editing.id)?.modified ?? [] : [];
 
   async function openEditor(recipe: Recipe) {
     setEditing(recipe);
@@ -325,7 +360,7 @@ export default function RecipesClient({
             key={recipe.id}
             recipe={recipe}
             record={byRecipeId.get(recipe.id)}
-            isPending={pendingSet.has(recipe.id)}
+            pendingFiles={pendingPaths[recipe.id] ?? []}
             busy={busy}
             onEdit={(r) => void openEditor(r)}
             onScaffold={(r) => void scaffold(r)}
@@ -351,9 +386,13 @@ export default function RecipesClient({
               className="mt-2 h-[52vh] w-full resize-none rounded-lg border border-white/10 bg-white/5 p-3 font-mono text-xs text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)]"
             />
             <div className="mt-3">
-              <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Changes</div>
+              <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Your unsaved edits</div>
               <div className="mt-2">
-                <RecipeChangeDiff original={original} draft={draft} />
+                {dirty ? (
+                  <RecipeChangeDiff original={original} draft={draft} />
+                ) : (
+                  <EditorEmptyChanges pendingFiles={editingPending} modified={editingModified} />
+                )}
               </div>
             </div>
           </div>
