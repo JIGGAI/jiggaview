@@ -17,6 +17,31 @@ function FileList({ paths }: { paths: string[] }) {
   );
 }
 
+type DriftItem = { path: string; kind: "pending" | "edited"; before: string; after: string };
+
+/** Per-artifact before/after diffs of what differs vs the running system —
+ * shown in the editor regardless of unsaved edits, so the actual change behind
+ * a card's "pending" / "locally edited" line is always visible. */
+function DriftDiffs({ items }: { items: DriftItem[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="mt-3 space-y-3">
+      <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">What differs from the running system</div>
+      {items.map((it) => (
+        <div key={`${it.kind}:${it.path}`} className="rounded-lg border border-white/10 bg-white/5 p-2">
+          <div className="mb-1 text-xs">
+            <span className="font-mono text-[color:var(--ck-text-secondary)]">{it.path}</span>{" "}
+            <span className="text-[color:var(--ck-text-tertiary)]">
+              — {it.kind === "pending" ? "live file → what Apply will write" : "your edit → what the recipe generates (update picker)"}
+            </span>
+          </div>
+          <RecipeChangeDiff original={it.before} draft={it.after} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Shown in the editor's change panel when the markdown buffer is unedited.
  * Explains that this panel is about RECIPE edits, and disambiguates it from the
  * card's drift (which is about generated files / deployment, not the recipe). */
@@ -75,7 +100,6 @@ function RecipeCard({
   busy,
   onEdit,
   onScaffold,
-  onApply,
   onDelete,
 }: {
   recipe: Recipe;
@@ -84,7 +108,6 @@ function RecipeCard({
   busy: string | null;
   onEdit: (r: Recipe) => void;
   onScaffold: (r: Recipe) => void;
-  onApply: () => void;
   onDelete: (r: Recipe) => void;
 }) {
   const isPending = pendingFiles.length > 0;
@@ -117,8 +140,8 @@ function RecipeCard({
       ) : null}
       {isPending ? (
         <p className="mt-2 text-xs text-amber-400">
-          Recipe differs from the running system — <strong>Apply</strong> updates <FileList paths={pendingFiles} /> and
-          restarts the supervisor.
+          Recipe differs from the running system — <strong>Apply</strong> updates <FileList paths={pendingFiles} /> (this
+          recipe only).
         </p>
       ) : (
         <DriftStatus record={record} />
@@ -130,7 +153,6 @@ function RecipeCard({
         busy={busy}
         onEdit={onEdit}
         onScaffold={onScaffold}
-        onApply={onApply}
         onDelete={onDelete}
       />
     </li>
@@ -144,7 +166,6 @@ function CardActions({
   busy,
   onEdit,
   onScaffold,
-  onApply,
   onDelete,
 }: {
   recipe: Recipe;
@@ -153,7 +174,6 @@ function CardActions({
   busy: string | null;
   onEdit: (r: Recipe) => void;
   onScaffold: (r: Recipe) => void;
-  onApply: () => void;
   onDelete: (r: Recipe) => void;
 }) {
   const disabled = busy !== null;
@@ -173,10 +193,10 @@ function CardActions({
         <button
           className="rounded-lg bg-amber-500/80 px-3 py-1.5 text-sm font-medium text-amber-950 hover:bg-amber-400 disabled:opacity-50"
           disabled={disabled}
-          onClick={onApply}
-          title="jigga update --apply: reconcile every recipe + restart the supervisor"
+          onClick={() => onScaffold(recipe)}
+          title="Apply just this recipe: re-scaffold it (updates its files to the recipe; never overwrites your edits). Does not touch other recipes."
         >
-          {busy === "__apply__" ? "Applying…" : "Apply"}
+          {busy === recipe.id ? "Applying…" : "Apply"}
         </button>
       ) : null}
 
@@ -220,6 +240,7 @@ export default function RecipesClient({
   const [original, setOriginal] = useState("");
   const [editorBusy, setEditorBusy] = useState(false);
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [driftItems, setDriftItems] = useState<DriftItem[]>([]);
 
   const byRecipeId = new Map(installed.map((r) => [r.recipe_id, r]));
   const pendingSet = new Set(Object.keys(pendingPaths).filter((id) => (pendingPaths[id] ?? []).length > 0));
@@ -232,18 +253,30 @@ export default function RecipesClient({
     setEditing(recipe);
     setDraft("");
     setOriginal("");
+    setDriftItems([]);
     setEditorError(null);
     setEditorBusy(true);
     try {
-      const res = await fetchJson<{ content?: string }>(
-        `/api/recipes/raw?name=${encodeURIComponent(recipeStem(recipe.source))}`,
-        { cache: "no-store" },
-      );
-      const content = res.content ?? "";
-      setDraft(content);
-      setOriginal(content);
-    } catch (e) {
-      setEditorError(e instanceof Error ? e.message : String(e));
+      // Markdown + drift in parallel; drift is best-effort context (what
+      // differs vs the running system) and must not block opening the editor.
+      const [rawRes, driftRes] = await Promise.allSettled([
+        fetchJson<{ content?: string }>(
+          `/api/recipes/raw?name=${encodeURIComponent(recipeStem(recipe.source))}`,
+          { cache: "no-store" },
+        ),
+        fetchJson<{ items?: DriftItem[] }>(
+          `/api/recipes/drift?recipe=${encodeURIComponent(recipe.id)}`,
+          { cache: "no-store" },
+        ),
+      ]);
+      if (rawRes.status === "fulfilled") {
+        const content = rawRes.value.content ?? "";
+        setDraft(content);
+        setOriginal(content);
+      } else {
+        setEditorError(rawRes.reason instanceof Error ? rawRes.reason.message : String(rawRes.reason));
+      }
+      if (driftRes.status === "fulfilled") setDriftItems(driftRes.value.items ?? []);
     } finally {
       setEditorBusy(false);
     }
@@ -341,15 +374,15 @@ export default function RecipesClient({
       {hasPending ? (
         <div className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-amber-200">
-            {pendingSet.size} recipe{pendingSet.size === 1 ? "" : "s"} with unapplied changes — apply to reconcile the
-            running system with your edits.
+            {pendingSet.size} recipe{pendingSet.size === 1 ? "" : "s"} with unapplied changes. Use a card&apos;s{" "}
+            <strong>Apply</strong> for just that one, or apply <strong>all</strong> at once (also restarts the supervisor).
           </p>
           <button
             className="shrink-0 rounded-lg bg-amber-500/80 px-3 py-1.5 text-sm font-medium text-amber-950 hover:bg-amber-400 disabled:opacity-50"
             disabled={busy !== null}
             onClick={() => void applyUpdate()}
           >
-            {busy === "__apply__" ? "Applying…" : "Apply (jigga update)"}
+            {busy === "__apply__" ? "Applying…" : "Apply all (jigga update)"}
           </button>
         </div>
       ) : null}
@@ -364,7 +397,6 @@ export default function RecipesClient({
             busy={busy}
             onEdit={(r) => void openEditor(r)}
             onScaffold={(r) => void scaffold(r)}
-            onApply={() => void applyUpdate()}
             onDelete={(r) => setDeleting(r)}
           />
         ))}
@@ -394,6 +426,7 @@ export default function RecipesClient({
                   <EditorEmptyChanges pendingFiles={editingPending} modified={editingModified} />
                 )}
               </div>
+              <DriftDiffs items={driftItems} />
             </div>
           </div>
           <div className="flex flex-col">

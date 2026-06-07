@@ -318,9 +318,17 @@ function diffSign(type: DiffLine["type"]): string {
   return " ";
 }
 
-export function RecipeChangeDiff({ original, draft }: { original: string; draft: string }) {
+export function RecipeChangeDiff({
+  original,
+  draft,
+  emptyLabel = "No differences.",
+}: {
+  original: string;
+  draft: string;
+  emptyLabel?: string;
+}) {
   if (original === draft) {
-    return <p className="text-xs text-[color:var(--ck-text-tertiary)]">No changes from the saved recipe.</p>;
+    return <p className="text-xs text-[color:var(--ck-text-tertiary)]">{emptyLabel}</p>;
   }
   const lines = diffLines(original.split("\n"), draft.split("\n"));
   const added = lines.filter((l) => l.type === "add").length;
