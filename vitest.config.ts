@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [tsconfigPaths(), react()],
   test: {
     environment: "node",
+    // jiggaview seed ships no test files yet; don't fail CI on an empty suite.
+    passWithNoTests: true,
     exclude: [
       "**/node_modules/**", 
       "**/.next/**", 
