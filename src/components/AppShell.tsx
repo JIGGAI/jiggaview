@@ -48,13 +48,12 @@ function SideNavLink({
 
 const NAV = [
   {
-    href: "/",
-    label: "Agents",
+    href: "/dashboard",
+    label: "Dashboard",
     icon: (
       <Icon>
         <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M3 11l9-8 9 8" />
-          <path d="M5 10v10h14V10" />
+          <path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-4H4zM14 8h6V4h-6z" />
         </svg>
       </Icon>
     ),
@@ -72,12 +71,13 @@ const NAV = [
     ),
   },
   {
-    href: "/dashboard",
-    label: "Dashboard",
+    href: "/",
+    label: "Agents",
     icon: (
       <Icon>
         <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-4H4zM14 8h6V4h-6z" />
+          <path d="M3 11l9-8 9 8" />
+          <path d="M5 10v10h14V10" />
         </svg>
       </Icon>
     ),

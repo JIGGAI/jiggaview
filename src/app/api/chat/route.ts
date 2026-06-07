@@ -42,16 +42,20 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
-    text?: string; conversation?: string;
+    text?: string; conversation?: string; agent?: string;
   };
   const text = String(body.text ?? "").trim();
   const conversation = String(body.conversation ?? "web").trim() || "web";
-  if (!text || text.startsWith("-") || conversation.startsWith("-")) {
+  const agent = String(body.agent ?? "").trim();
+  if (!text || text.startsWith("-") || conversation.startsWith("-") || agent.startsWith("-")) {
     return NextResponse.json({ ok: false, error: "text required" }, { status: 400 });
   }
-  const res = await runJigga([
+  const args = [
     "webchat", "send", "--wait", "--json", "--text", text, "--conversation", conversation,
-  ]);
+  ];
+  // Address a specific agent (the picker); without it the channel default answers.
+  if (agent) args.push("--agent", agent);
+  const res = await runJigga(args);
   if (!res.ok) {
     // CLI errors print to stdout under --json paths too — surface both.
     const detail = res.stderr.trim() || res.stdout.trim() || `send failed (exit=${res.exitCode})`;
