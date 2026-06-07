@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmationModal } from "@/components/ConfirmationModal";
 import { Modal } from "@/components/Modal";
 import { fetchJson } from "@/lib/fetch-json";
 import type { InstalledRecord, Recipe } from "./page";
+import { parseRecipeFrontmatter, RecipeInfoPanel, RecipeChangeDiff } from "./recipe-editor-panel";
 
 function recipeStem(source: string): string {
   const file = source.split("/").pop() ?? source;
@@ -133,6 +134,7 @@ export default function RecipesClient({
   const byRecipeId = new Map(installed.map((r) => [r.recipe_id, r]));
   const pendingSet = new Set(pending);
   const dirty = draft !== original;
+  const parsed = useMemo(() => parseRecipeFrontmatter(draft), [draft]);
 
   async function openEditor(recipe: Recipe) {
     setEditing(recipe);
@@ -279,14 +281,31 @@ export default function RecipesClient({
         <div className="text-xs text-[color:var(--ck-text-tertiary)]">
           {editing ? <>{editing.kind} · <span className="font-mono">{recipeStem(editing.source)}</span> · <span className="font-mono">{editing.source}</span></> : null}
         </div>
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          spellCheck={false}
-          disabled={editorBusy}
-          placeholder={editorBusy ? "Loading…" : ""}
-          className="mt-3 h-[60vh] w-full resize-none rounded-lg border border-white/10 bg-white/5 p-3 font-mono text-xs text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)]"
-        />
+        <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="flex flex-col">
+            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Recipe markdown</div>
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              spellCheck={false}
+              disabled={editorBusy}
+              placeholder={editorBusy ? "Loading…" : ""}
+              className="mt-2 h-[52vh] w-full resize-none rounded-lg border border-white/10 bg-white/5 p-3 font-mono text-xs text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)]"
+            />
+            <div className="mt-3">
+              <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Changes</div>
+              <div className="mt-2">
+                <RecipeChangeDiff original={original} draft={draft} />
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col">
+            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Preview (from frontmatter)</div>
+            <div className="mt-2 max-h-[78vh] overflow-auto pr-1">
+              <RecipeInfoPanel fm={parsed.fm} error={parsed.error} />
+            </div>
+          </div>
+        </div>
         {editorError ? (
           <div className="mt-3 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">
             {editorError}
