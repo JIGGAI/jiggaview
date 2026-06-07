@@ -1,6 +1,26 @@
 "use client";
 
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+
+/** Canonicalize a recipe for semantic diffing: re-serialize the YAML
+ * frontmatter with sorted keys (so key-order / flow-vs-block / quoting noise
+ * disappears), leaving the markdown body untouched. Comments in the frontmatter
+ * are dropped — this is a diff view, not the file you edit. Falls back to the
+ * raw text if the frontmatter doesn't parse (e.g. mid-edit). */
+export function normalizeRecipe(raw: string): string {
+  if (!raw.startsWith("---")) return raw;
+  const firstNl = raw.indexOf("\n");
+  const end = raw.indexOf("\n---", firstNl);
+  if (firstNl === -1 || end === -1) return raw;
+  const fmText = raw.slice(firstNl + 1, end);
+  const body = raw.slice(end + 4); // skip the closing "\n---"
+  try {
+    const canon = stringifyYaml(parseYaml(fmText) ?? {}, { sortMapEntries: true });
+    return `---\n${canon}---${body}`;
+  } catch {
+    return raw;
+  }
+}
 
 // --- JIGGA recipe frontmatter (a tolerant subset — users edit live YAML) -----
 
