@@ -11,7 +11,7 @@ type FileEntry = { name: string; missing: boolean; required?: boolean };
 type Member = { id?: string; role?: string; required?: boolean };
 type AgentListItem = {
   id: string; name: string; role: string; model?: string | null;
-  default: boolean; schedules: number;
+  default: boolean; schedules: number; team?: string | null;
 };
 
 const inputCls =
@@ -27,11 +27,13 @@ export default function TeamEditor({
   teamId,
   team,
   teamAgents,
+  allAgents,
   disabled,
 }: {
   teamId: string;
   team: Record<string, unknown>;
   teamAgents: AgentListItem[];
+  allAgents: AgentListItem[];
   disabled: boolean;
 }) {
   const router = useRouter();
@@ -42,10 +44,16 @@ export default function TeamEditor({
 
   const members = Array.isArray(team.agents) ? (team.agents as Member[]) : [];
   const recipeStem = recipeStemFor(teamId);
+  // Existing agents (on other teams / solo) that aren't already on this team —
+  // candidates for "add an existing agent".
+  const onThisTeam = new Set(teamAgents.map((a) => a.id));
+  const addCandidates = allAgents.filter((a) => a.team !== teamId && !onThisTeam.has(a.id));
 
   // agents tab: add-member form
   const [newRole, setNewRole] = useState("");
   const [newAgentId, setNewAgentId] = useState("");
+  // agents tab: add an EXISTING agent (from any team) to this team
+  const [pickAgentId, setPickAgentId] = useState("");
   // recipe tab
   const [recipeContent, setRecipeContent] = useState("");
   const [recipeLoaded, setRecipeLoaded] = useState(false);
@@ -117,6 +125,26 @@ export default function TeamEditor({
       note(`Added and staffed ${id} — agent created from the team recipe.`);
       setNewAgentId("");
       setNewRole("");
+      router.refresh();
+    } catch (e) {
+      note(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addExistingAgent() {
+    const agent = pickAgentId.trim();
+    if (!agent) return;
+    setBusy(true);
+    try {
+      await fetchJson("/api/team-add-agent", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ team: teamId, agent }),
+      });
+      note(`Added ${agent} to ${teamId} — its config was copied in as a new member.`);
+      setPickAgentId("");
       router.refresh();
     } catch (e) {
       note(e instanceof Error ? e.message : String(e), true);
@@ -362,6 +390,34 @@ export default function TeamEditor({
               <input className={inputCls} placeholder="agent id, e.g. meeting_prep_agent" value={newAgentId} onChange={(e) => setNewAgentId(e.target.value)} />
               <input className={inputCls} placeholder="role (optional), e.g. meeting prep" value={newRole} onChange={(e) => setNewRole(e.target.value)} />
               <button className={primaryBtn} disabled={busy || !newAgentId.trim()} onClick={() => void addMember()}>
+                Add agent
+              </button>
+            </div>
+          </div>
+
+          <div className="ck-card max-w-2xl p-4">
+            <h2 className="text-sm font-medium">Add an existing agent</h2>
+            <p className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">
+              Copy another team&apos;s agent (with its config) onto this team as a new member.
+              It joins as <span className="font-mono">{teamId}-&lt;role&gt;</span> — an independent copy.
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <select
+                className={inputCls}
+                value={pickAgentId}
+                disabled={busy || addCandidates.length === 0}
+                onChange={(e) => setPickAgentId(e.target.value)}
+              >
+                <option value="">
+                  {addCandidates.length ? "Select an agent…" : "No other agents available"}
+                </option>
+                {addCandidates.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name || a.id} ({a.id}){a.team ? ` · ${a.team}` : ""}
+                  </option>
+                ))}
+              </select>
+              <button className={primaryBtn} disabled={busy || !pickAgentId} onClick={() => void addExistingAgent()}>
                 Add agent
               </button>
             </div>

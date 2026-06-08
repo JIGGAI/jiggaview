@@ -21,6 +21,7 @@ export default async function TeamPage({
   const { teamId } = await params;
   let team: Record<string, unknown> | null = null;
   let teamAgents: AgentListItem[] = [];
+  let allAgentsList: AgentListItem[] = [];
   let disabled = false;
   let error: string | null = null;
   try {
@@ -31,6 +32,7 @@ export default async function TeamPage({
     ]);
     team = teamDoc;
     teamAgents = allAgents.filter((a) => a.team === teamId);
+    allAgentsList = allAgents;
     disabled = Boolean(disabledCfg?.teams?.includes(teamId));
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
@@ -38,5 +40,13 @@ export default async function TeamPage({
   if (error || !team) {
     return <p className="text-sm text-red-400">{error ?? `No such team: ${teamId}`}</p>;
   }
-  return <TeamEditor teamId={teamId} team={team} teamAgents={teamAgents} disabled={disabled} />;
+  return (
+    <TeamEditor
+      teamId={teamId}
+      team={team}
+      teamAgents={teamAgents}
+      allAgents={allAgentsList}
+      disabled={disabled}
+    />
+  );
 }
