@@ -468,10 +468,10 @@ function CardActions({
   );
 }
 
-/** Builtin (shipped template) card — two actions, mirroring ClawKitchen:
- * Create team/agent (scaffold) and View recipe (read-only editor modal). No
- * Edit/Apply/Delete: a template has no user-dir copy to edit until you create
- * from it. */
+/** Builtin (shipped template) card — two actions, mirroring ClawRecipes:
+ * Create team/agent (opens the id+name modal → a new independent instance) and
+ * View recipe (read-only editor modal). The template itself is never edited or
+ * "installed"; each Create makes a fresh Local copy you can multiply. */
 function BuiltinCard({
   recipe,
   busy,
@@ -493,9 +493,6 @@ function BuiltinCard({
             {recipe.kind} · {recipe.id}
           </div>
         </div>
-        {recipe.installed ? (
-          <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">installed</span>
-        ) : null}
       </div>
       {recipe.description ? (
         <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">{recipe.description}</p>
@@ -505,9 +502,9 @@ function BuiltinCard({
           className="rounded-lg bg-[var(--ck-accent-red)] px-3 py-1.5 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] hover:bg-[var(--ck-accent-red-hover)] disabled:opacity-50"
           disabled={disabled}
           onClick={() => onCreate(recipe)}
-          title="Scaffold this template (agents, team, workflows, workspace)"
+          title="Create a new independent team/agent from this template (you can make as many as you like)"
         >
-          {busy === recipe.id ? "Creating…" : createLabel(recipe)}
+          {createLabel(recipe)}
         </button>
         <button className={BTN} disabled={disabled} onClick={() => onView(recipe)}>
           View recipe
@@ -524,6 +521,103 @@ function RecipeSection({ title, hint, children }: { title: string; hint: string;
       <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">{hint}</p>
       <div className="mt-3">{children}</div>
     </section>
+  );
+}
+
+/** First id of the form `<base>`, `<base>-2`, `<base>-3`… not already used by a
+ * recipe — the free-instance suggestion (mirrors ClawRecipes' auto-increment). */
+function freeInstanceId(base: string, taken: Set<string>): string {
+  if (!taken.has(base)) return base;
+  for (let n = 2; n < 1000; n += 1) {
+    const candidate = `${base}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${base}-${Date.now()}`;
+}
+
+const ID_RE = /^[A-Za-z][A-Za-z0-9._-]*$/;
+
+/** Asks for a new id (+ optional name) before creating an instance from a
+ * builtin template. Lets you spin up as many independent copies as you want. */
+function CreateInstanceModal({
+  source,
+  id,
+  setId,
+  name,
+  setName,
+  taken,
+  busy,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  source: Recipe | null;
+  id: string;
+  setId: (v: string) => void;
+  name: string;
+  setName: (v: string) => void;
+  taken: Set<string>;
+  busy: boolean;
+  error: string | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const noun = source?.kind === "agent" ? "agent" : "team";
+  const trimmed = id.trim();
+  let invalid: string | null = null;
+  if (!trimmed) invalid = `A ${noun} id is required.`;
+  else if (!ID_RE.test(trimmed)) invalid = "Start with a letter; use letters, digits, '.', '_', '-'.";
+  else if (taken.has(trimmed)) invalid = `${trimmed} is already taken — pick another.`;
+  return (
+    <Modal open={source !== null} onClose={onClose} title={source ? `Create ${noun} from ${source.name}` : "Create"}>
+      <div className="space-y-3">
+        <label className="block">
+          <span className="text-sm font-medium text-[color:var(--ck-text-primary)]">New {noun} id</span>
+          <input
+            value={id}
+            onChange={(e) => setId(e.target.value)}
+            spellCheck={false}
+            disabled={busy}
+            className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-mono text-sm text-[color:var(--ck-text-primary)]"
+          />
+          <span className="mt-1 block text-xs text-[color:var(--ck-text-tertiary)]">
+            {noun === "team"
+              ? "Members become <id>-<role> — independent of other copies."
+              : "The agent is created under this id."}
+          </span>
+        </label>
+        <label className="block">
+          <span className="text-sm font-medium text-[color:var(--ck-text-primary)]">Display name (optional)</span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={busy}
+            className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
+          />
+        </label>
+        {invalid ? <p className="text-xs text-amber-300">{invalid}</p> : null}
+        {error ? (
+          <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">{error}</div>
+        ) : null}
+      </div>
+      <div className="mt-4 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={busy || invalid !== null}
+          onClick={onConfirm}
+          className="rounded-lg bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] hover:bg-[var(--ck-accent-red-hover)] disabled:opacity-50"
+        >
+          {busy ? "Creating…" : `Create ${noun}`}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -555,7 +649,17 @@ export default function RecipesClient({
   const [defaultContent, setDefaultContent] = useState<string | null>(null);
   const [editorTab, setEditorTab] = useState<"edit" | "diff">("edit");
 
+  // Create-instance modal state (Create team/agent from a builtin template).
+  const [creating, setCreating] = useState<Recipe | null>(null);
+  const [createId, setCreateId] = useState("");
+  const [createName, setCreateName] = useState("");
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
   const byRecipeId = new Map(installed.map((r) => [r.recipe_id, r]));
+  // Every id in use (across templates + local copies) — for free-id suggestions
+  // and duplicate validation in the Create modal.
+  const takenIds = new Set(recipes.map((r) => r.id));
   const pendingSet = new Set(Object.keys(pendingPaths).filter((id) => (pendingPaths[id] ?? []).length > 0));
   const dirty = draft !== original;
   const parsed = useMemo(() => parseRecipeFrontmatter(draft), [draft]);
@@ -688,25 +792,44 @@ export default function RecipesClient({
     }
   }
 
-  /** Scaffold the recipe open in the read-only viewer, then close it. Drives
-   * the modal's own busy state so the Create button reflects progress. */
-  async function createFromEditor() {
-    if (!editing) return;
-    setEditorBusy(true);
-    setEditorError(null);
+  /** Open the Create-instance modal for a template, pre-filling a free id +
+   * name. Closes the viewer if it was open (the View modal's Create button). */
+  function openCreate(recipe: Recipe) {
+    closeEditor();
+    setCreating(recipe);
+    setCreateId(freeInstanceId(recipeStem(recipe.source), takenIds));
+    setCreateName("");
+    setCreateError(null);
+  }
+
+  function closeCreate() {
+    setCreating(null);
+    setCreateId("");
+    setCreateName("");
+    setCreateError(null);
+  }
+
+  async function submitCreate() {
+    if (!creating) return;
+    setCreateBusy(true);
+    setCreateError(null);
     try {
-      await fetchJson("/api/recipes/scaffold", {
+      await fetchJson("/api/recipes/create", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: editing.id }),
+        body: JSON.stringify({
+          recipe: recipeStem(creating.source),
+          id: createId.trim(),
+          name: createName.trim() || undefined,
+        }),
       });
-      setMessage(`Created ${editing.name} from the template.`);
-      closeEditor();
+      setMessage(`Created ${createName.trim() || createId.trim()} from ${creating.name}. It's now a Local recipe.`);
+      closeCreate();
       router.refresh();
     } catch (e) {
-      setEditorError(e instanceof Error ? e.message : String(e));
+      setCreateError(e instanceof Error ? e.message : String(e));
     } finally {
-      setEditorBusy(false);
+      setCreateBusy(false);
     }
   }
 
@@ -744,7 +867,7 @@ export default function RecipesClient({
             <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {localRecipes.map((recipe) => (
                 <RecipeCard
-                  key={recipe.id}
+                  key={recipe.source}
                   recipe={recipe}
                   record={byRecipeId.get(recipe.id)}
                   pendingFiles={pendingPaths[recipe.id] ?? []}
@@ -770,11 +893,11 @@ export default function RecipesClient({
             <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {builtinRecipes.map((recipe) => (
                 <BuiltinCard
-                  key={recipe.id}
+                  key={recipe.source}
                   recipe={recipe}
                   busy={busy}
                   onView={(r) => void openEditor(r, true)}
-                  onCreate={(r) => void scaffold(r)}
+                  onCreate={(r) => openCreate(r)}
                 />
               ))}
             </ul>
@@ -803,7 +926,20 @@ export default function RecipesClient({
         modified={editingModified}
         onClose={closeEditor}
         onSave={() => void saveEditor()}
-        onCreate={() => void createFromEditor()}
+        onCreate={() => { if (editing) openCreate(editing); }}
+      />
+
+      <CreateInstanceModal
+        source={creating}
+        id={createId}
+        setId={setCreateId}
+        name={createName}
+        setName={setCreateName}
+        taken={takenIds}
+        busy={createBusy}
+        error={createError}
+        onClose={closeCreate}
+        onConfirm={() => void submitCreate()}
       />
 
       {deleting ? (
