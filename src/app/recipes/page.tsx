@@ -10,6 +10,9 @@ export type Recipe = {
   description?: string | null;
   source: string;
   installed: boolean;
+  /** true when no user-dir copy shadows it (shipped template, not an editable
+   * local copy). Older jigga without the flag → treated as local (undefined). */
+  bundled?: boolean;
 };
 
 export type InstalledRecord = {
