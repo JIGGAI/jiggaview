@@ -107,6 +107,19 @@ const NAV = [
     ),
   },
   {
+    href: "/tickets",
+    label: "Tickets",
+    icon: (
+      <Icon>
+        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="4" y="4" width="5" height="16" rx="1" />
+          <rect x="11" y="4" width="5" height="10" rx="1" />
+          <rect x="18" y="4" width="2" height="13" rx="1" />
+        </svg>
+      </Icon>
+    ),
+  },
+  {
     href: "/runs",
     label: "Runs",
     icon: (
