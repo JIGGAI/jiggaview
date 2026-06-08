@@ -818,7 +818,12 @@ export default function RecipesClient({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          recipe: recipeStem(creating.source),
+          // Pass the EXACT recipe path this card represents (a builtin card's
+          // source is the bundled file), not the bare stem — `find_recipe`
+          // resolves a stem user-dir-first, so a stale local copy would shadow
+          // the shipped template and the new team would miss recent additions
+          // (e.g. lanes).
+          recipe: creating.source,
           id: createId.trim(),
           name: createName.trim() || undefined,
         }),
