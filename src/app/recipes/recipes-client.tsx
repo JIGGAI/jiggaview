@@ -65,6 +65,142 @@ function RecipeDefaultDiff({ defaultContent, current, busy }: { defaultContent: 
   );
 }
 
+function createLabel(recipe: Recipe | null): string {
+  return recipe?.kind === "agent" ? "Create agent" : "Create team";
+}
+
+function EditorBody({
+  recipe,
+  draft,
+  setDraft,
+  original,
+  dirty,
+  parsed,
+  busy,
+  readOnly,
+  defaultContent,
+  tab,
+  pendingFiles,
+  modified,
+}: {
+  recipe: Recipe | null;
+  draft: string;
+  setDraft: (v: string) => void;
+  original: string;
+  dirty: boolean;
+  parsed: { fm: ReturnType<typeof parseRecipeFrontmatter>["fm"]; error?: string };
+  busy: boolean;
+  readOnly: boolean;
+  defaultContent: string | null;
+  tab: "edit" | "diff";
+  pendingFiles: string[];
+  modified: string[];
+}) {
+  if (tab === "diff") {
+    return (
+      <div className="mt-3">
+        <RecipeDefaultDiff defaultContent={defaultContent} current={draft} busy={busy} />
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="flex flex-col">
+        <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Recipe markdown</div>
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          spellCheck={false}
+          disabled={busy || readOnly}
+          readOnly={readOnly}
+          placeholder={busy ? "Loading…" : ""}
+          className="mt-2 h-[52vh] w-full resize-none rounded-lg border border-white/10 bg-white/5 p-3 font-mono text-xs text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)]"
+        />
+        {readOnly ? (
+          <p className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
+            Read-only — this is the shipped template. <strong>{createLabel(recipe)}</strong> scaffolds it; your copy then
+            becomes editable under Local recipes.
+          </p>
+        ) : (
+          <div className="mt-3">
+            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Your unsaved edits</div>
+            <div className="mt-2">
+              {dirty ? (
+                <RecipeChangeDiff original={original} draft={draft} />
+              ) : (
+                <EditorEmptyChanges pendingFiles={pendingFiles} modified={modified} />
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="flex flex-col">
+        <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Preview (from frontmatter)</div>
+        <div className="mt-2 max-h-[78vh] overflow-auto pr-1">
+          <RecipeInfoPanel fm={parsed.fm} error={parsed.error} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditorFooter({
+  recipe,
+  readOnly,
+  dirty,
+  busy,
+  onClose,
+  onSave,
+  onCreate,
+}: {
+  recipe: Recipe | null;
+  readOnly: boolean;
+  dirty: boolean;
+  busy: boolean;
+  onClose: () => void;
+  onSave: () => void;
+  onCreate: () => void;
+}) {
+  let status = "No changes";
+  if (readOnly) status = "Shipped template (read-only)";
+  else if (dirty) status = "Unsaved changes";
+  return (
+    <div className="mt-4 flex items-center justify-between gap-2">
+      <span className={`text-xs ${!readOnly && dirty ? "text-amber-300" : "text-[color:var(--ck-text-tertiary)]"}`}>
+        {status}
+      </span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+        >
+          {readOnly ? "Close" : "Cancel"}
+        </button>
+        {readOnly ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onCreate}
+            className="rounded-lg bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] hover:bg-[var(--ck-accent-red-hover)] disabled:opacity-50"
+          >
+            {busy ? "Creating…" : createLabel(recipe)}
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={!dirty || busy}
+            onClick={onSave}
+            className="rounded-lg bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] hover:bg-[var(--ck-accent-red-hover)] disabled:opacity-50"
+          >
+            {busy ? "Saving…" : "Save"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RecipeEditorModal({
   recipe,
   draft,
@@ -74,6 +210,7 @@ function RecipeEditorModal({
   parsed,
   busy,
   error,
+  readOnly,
   defaultContent,
   tab,
   setTab,
@@ -81,6 +218,7 @@ function RecipeEditorModal({
   modified,
   onClose,
   onSave,
+  onCreate,
 }: {
   recipe: Recipe | null;
   draft: string;
@@ -90,6 +228,7 @@ function RecipeEditorModal({
   parsed: { fm: ReturnType<typeof parseRecipeFrontmatter>["fm"]; error?: string };
   busy: boolean;
   error: string | null;
+  readOnly: boolean;
   defaultContent: string | null;
   tab: "edit" | "diff";
   setTab: (t: "edit" | "diff") => void;
@@ -97,84 +236,57 @@ function RecipeEditorModal({
   modified: string[];
   onClose: () => void;
   onSave: () => void;
+  onCreate: () => void;
 }) {
   const defaultDiffers = defaultContent !== null && defaultContent !== original;
+  const verb = readOnly ? "View" : "Edit";
+  const title = recipe ? `${verb} recipe: ${recipe.name}` : "Recipe";
   return (
-    <Modal open={recipe !== null} onClose={onClose} title={recipe ? `Edit recipe: ${recipe.name}` : "Edit recipe"} size="full">
+    <Modal open={recipe !== null} onClose={onClose} title={title} size="full">
       <div className="text-xs text-[color:var(--ck-text-tertiary)]">
         {recipe ? <>{recipe.kind} · <span className="font-mono">{recipeStem(recipe.source)}</span> · <span className="font-mono">{recipe.source}</span></> : null}
       </div>
-      <div className="mt-3 flex gap-1 border-b border-white/10 text-sm">
-        <EditorTab active={tab === "edit"} onClick={() => setTab("edit")}>Edit</EditorTab>
-        <EditorTab active={tab === "diff"} onClick={() => setTab("diff")}>
-          Diff vs default{defaultDiffers ? " •" : ""}
-        </EditorTab>
-      </div>
-
-      {tab === "edit" ? (
-        <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="flex flex-col">
-            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Recipe markdown</div>
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              spellCheck={false}
-              disabled={busy}
-              placeholder={busy ? "Loading…" : ""}
-              className="mt-2 h-[52vh] w-full resize-none rounded-lg border border-white/10 bg-white/5 p-3 font-mono text-xs text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)]"
-            />
-            <div className="mt-3">
-              <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Your unsaved edits</div>
-              <div className="mt-2">
-                {dirty ? (
-                  <RecipeChangeDiff original={original} draft={draft} />
-                ) : (
-                  <EditorEmptyChanges pendingFiles={pendingFiles} modified={modified} />
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col">
-            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Preview (from frontmatter)</div>
-            <div className="mt-2 max-h-[78vh] overflow-auto pr-1">
-              <RecipeInfoPanel fm={parsed.fm} error={parsed.error} />
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-3">
-          <RecipeDefaultDiff defaultContent={defaultContent} current={draft} busy={busy} />
+      {readOnly ? null : (
+        <div className="mt-3 flex gap-1 border-b border-white/10 text-sm">
+          <EditorTab active={tab === "edit"} onClick={() => setTab("edit")}>Edit</EditorTab>
+          <EditorTab active={tab === "diff"} onClick={() => setTab("diff")}>
+            Diff vs default{defaultDiffers ? " •" : ""}
+          </EditorTab>
         </div>
       )}
+
+      <EditorBody
+        recipe={recipe}
+        draft={draft}
+        setDraft={setDraft}
+        original={original}
+        dirty={dirty}
+        parsed={parsed}
+        busy={busy}
+        readOnly={readOnly}
+        defaultContent={defaultContent}
+        tab={readOnly ? "edit" : tab}
+        pendingFiles={pendingFiles}
+        modified={modified}
+      />
       {error ? (
         <div className="mt-3 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">{error}</div>
       ) : null}
-      <div className="mt-4 flex items-center justify-between gap-2">
-        <span className={`text-xs ${dirty ? "text-amber-300" : "text-[color:var(--ck-text-tertiary)]"}`}>
-          {dirty ? "Unsaved changes" : "No changes"}
-        </span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={!dirty || busy}
-            onClick={onSave}
-            className="rounded-lg bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] hover:bg-[var(--ck-accent-red-hover)] disabled:opacity-50"
-          >
-            {busy ? "Saving…" : "Save"}
-          </button>
-        </div>
-      </div>
-      <p className="mt-3 text-xs text-[color:var(--ck-text-tertiary)]">
-        Save writes your copy to <code>~/.jigga/recipes</code> (overrides the bundled default). Then click{" "}
-        <strong>Apply</strong> on the recipe&apos;s card to re-scaffold it (this recipe only).
-      </p>
+      <EditorFooter
+        recipe={recipe}
+        readOnly={readOnly}
+        dirty={dirty}
+        busy={busy}
+        onClose={onClose}
+        onSave={onSave}
+        onCreate={onCreate}
+      />
+      {readOnly ? null : (
+        <p className="mt-3 text-xs text-[color:var(--ck-text-tertiary)]">
+          Save writes your copy to <code>~/.jigga/recipes</code> (overrides the bundled default). Then click{" "}
+          <strong>Apply</strong> on the recipe&apos;s card to re-scaffold it (this recipe only).
+        </p>
+      )}
     </Modal>
   );
 }
@@ -356,6 +468,65 @@ function CardActions({
   );
 }
 
+/** Builtin (shipped template) card — two actions, mirroring ClawKitchen:
+ * Create team/agent (scaffold) and View recipe (read-only editor modal). No
+ * Edit/Apply/Delete: a template has no user-dir copy to edit until you create
+ * from it. */
+function BuiltinCard({
+  recipe,
+  busy,
+  onView,
+  onCreate,
+}: {
+  recipe: Recipe;
+  busy: string | null;
+  onView: (r: Recipe) => void;
+  onCreate: (r: Recipe) => void;
+}) {
+  const disabled = busy !== null;
+  return (
+    <li className="flex flex-col rounded-xl border border-[color:var(--ck-border-subtle)] bg-white/5 p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="font-medium">{recipe.name}</div>
+          <div className="text-xs text-[color:var(--ck-text-tertiary)]">
+            {recipe.kind} · {recipe.id}
+          </div>
+        </div>
+        {recipe.installed ? (
+          <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">installed</span>
+        ) : null}
+      </div>
+      {recipe.description ? (
+        <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">{recipe.description}</p>
+      ) : null}
+      <div className="mt-auto flex flex-wrap gap-2 pt-3">
+        <button
+          className="rounded-lg bg-[var(--ck-accent-red)] px-3 py-1.5 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] hover:bg-[var(--ck-accent-red-hover)] disabled:opacity-50"
+          disabled={disabled}
+          onClick={() => onCreate(recipe)}
+          title="Scaffold this template (agents, team, workflows, workspace)"
+        >
+          {busy === recipe.id ? "Creating…" : createLabel(recipe)}
+        </button>
+        <button className={BTN} disabled={disabled} onClick={() => onView(recipe)}>
+          View recipe
+        </button>
+      </div>
+    </li>
+  );
+}
+
+function RecipeSection({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h2 className="text-lg font-semibold tracking-tight text-[color:var(--ck-text-primary)]">{title}</h2>
+      <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">{hint}</p>
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
 export default function RecipesClient({
   recipes,
   installed,
@@ -373,6 +544,8 @@ export default function RecipesClient({
 
   // Editor state — one recipe open at a time.
   const [editing, setEditing] = useState<Recipe | null>(null);
+  // "view" = read-only (builtin templates), "edit" = your local copy.
+  const [editorReadOnly, setEditorReadOnly] = useState(false);
   const [draft, setDraft] = useState("");
   const [original, setOriginal] = useState("");
   const [editorBusy, setEditorBusy] = useState(false);
@@ -389,8 +562,9 @@ export default function RecipesClient({
   const editingPending = editing ? pendingPaths[editing.id] ?? [] : [];
   const editingModified = editing ? byRecipeId.get(editing.id)?.modified ?? [] : [];
 
-  async function openEditor(recipe: Recipe) {
+  async function openEditor(recipe: Recipe, readOnly = false) {
     setEditing(recipe);
+    setEditorReadOnly(readOnly);
     setDraft("");
     setOriginal("");
     setDefaultContent(null);
@@ -399,15 +573,20 @@ export default function RecipesClient({
     setEditorBusy(true);
     const stem = recipeStem(recipe.source);
     try {
-      // Your copy + the shipped default in parallel; the default is best-effort
-      // (no bundled version, or an older jigga without --bundled) and must not
-      // block opening the editor.
-      const [rawRes, defRes] = await Promise.allSettled([
+      // Builtin (read-only) view: just the recipe markdown — it IS the default,
+      // so there's no default to diff against. Local copies also fetch the
+      // shipped default for the Diff tab (best-effort: missing on older jigga).
+      const requests: Array<Promise<{ content?: string }>> = [
         fetchJson<{ content?: string }>(`/api/recipes/raw?name=${encodeURIComponent(stem)}`, { cache: "no-store" }),
-        fetchJson<{ content?: string }>(`/api/recipes/raw?name=${encodeURIComponent(stem)}&bundled=1`, {
-          cache: "no-store",
-        }),
-      ]);
+      ];
+      if (!readOnly) {
+        requests.push(
+          fetchJson<{ content?: string }>(`/api/recipes/raw?name=${encodeURIComponent(stem)}&bundled=1`, {
+            cache: "no-store",
+          }),
+        );
+      }
+      const [rawRes, defRes] = await Promise.allSettled(requests);
       if (rawRes.status === "fulfilled") {
         const content = rawRes.value.content ?? "";
         setDraft(content);
@@ -415,7 +594,7 @@ export default function RecipesClient({
       } else {
         setEditorError(rawRes.reason instanceof Error ? rawRes.reason.message : String(rawRes.reason));
       }
-      setDefaultContent(defRes.status === "fulfilled" ? defRes.value.content ?? null : null);
+      setDefaultContent(defRes && defRes.status === "fulfilled" ? defRes.value.content ?? null : null);
     } finally {
       setEditorBusy(false);
     }
@@ -423,6 +602,7 @@ export default function RecipesClient({
 
   function closeEditor() {
     setEditing(null);
+    setEditorReadOnly(false);
     setDraft("");
     setOriginal("");
     setDefaultContent(null);
@@ -508,7 +688,33 @@ export default function RecipesClient({
     }
   }
 
+  /** Scaffold the recipe open in the read-only viewer, then close it. Drives
+   * the modal's own busy state so the Create button reflects progress. */
+  async function createFromEditor() {
+    if (!editing) return;
+    setEditorBusy(true);
+    setEditorError(null);
+    try {
+      await fetchJson("/api/recipes/scaffold", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: editing.id }),
+      });
+      setMessage(`Created ${editing.name} from the template.`);
+      closeEditor();
+      router.refresh();
+    } catch (e) {
+      setEditorError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEditorBusy(false);
+    }
+  }
+
   const hasPending = pendingSet.size > 0;
+  // `bundled === undefined` (older jigga without the flag) falls into Local —
+  // the editable default keeps every recipe actionable.
+  const localRecipes = recipes.filter((r) => !r.bundled);
+  const builtinRecipes = recipes.filter((r) => r.bundled);
 
   return (
     <div className="mt-6">
@@ -528,20 +734,57 @@ export default function RecipesClient({
         </div>
       ) : null}
       {message ? <p className="mb-3 text-sm text-[color:var(--ck-text-secondary)]">{message}</p> : null}
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {recipes.map((recipe) => (
-          <RecipeCard
-            key={recipe.id}
-            recipe={recipe}
-            record={byRecipeId.get(recipe.id)}
-            pendingFiles={pendingPaths[recipe.id] ?? []}
-            busy={busy}
-            onEdit={(r) => void openEditor(r)}
-            onScaffold={(r) => void scaffold(r)}
-            onDelete={(r) => setDeleting(r)}
-          />
-        ))}
-      </ul>
+
+      <div className="space-y-10">
+        <RecipeSection
+          title={`Local recipes (${localRecipes.length})`}
+          hint="Your editable copies under ~/.jigga/recipes — Edit, Apply, and Delete."
+        >
+          {localRecipes.length ? (
+            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {localRecipes.map((recipe) => (
+                <RecipeCard
+                  key={recipe.id}
+                  recipe={recipe}
+                  record={byRecipeId.get(recipe.id)}
+                  pendingFiles={pendingPaths[recipe.id] ?? []}
+                  busy={busy}
+                  onEdit={(r) => void openEditor(r)}
+                  onScaffold={(r) => void scaffold(r)}
+                  onDelete={(r) => setDeleting(r)}
+                />
+              ))}
+            </ul>
+          ) : (
+            <div className="rounded-xl border border-[color:var(--ck-border-subtle)] bg-white/5 px-4 py-3 text-sm text-[color:var(--ck-text-secondary)]">
+              None yet — create one from a builtin template below.
+            </div>
+          )}
+        </RecipeSection>
+
+        <RecipeSection
+          title={`Builtin recipes (${builtinRecipes.length})`}
+          hint="Shipped templates — Create a team/agent from one, or View the recipe."
+        >
+          {builtinRecipes.length ? (
+            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {builtinRecipes.map((recipe) => (
+                <BuiltinCard
+                  key={recipe.id}
+                  recipe={recipe}
+                  busy={busy}
+                  onView={(r) => void openEditor(r, true)}
+                  onCreate={(r) => void scaffold(r)}
+                />
+              ))}
+            </ul>
+          ) : (
+            <div className="rounded-xl border border-[color:var(--ck-border-subtle)] bg-white/5 px-4 py-3 text-sm text-[color:var(--ck-text-secondary)]">
+              None.
+            </div>
+          )}
+        </RecipeSection>
+      </div>
 
       <RecipeEditorModal
         recipe={editing}
@@ -552,6 +795,7 @@ export default function RecipesClient({
         parsed={parsed}
         busy={editorBusy}
         error={editorError}
+        readOnly={editorReadOnly}
         defaultContent={defaultContent}
         tab={editorTab}
         setTab={setEditorTab}
@@ -559,6 +803,7 @@ export default function RecipesClient({
         modified={editingModified}
         onClose={closeEditor}
         onSave={() => void saveEditor()}
+        onCreate={() => void createFromEditor()}
       />
 
       {deleting ? (
