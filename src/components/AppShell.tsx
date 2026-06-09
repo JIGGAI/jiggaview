@@ -21,27 +21,40 @@ function SideNavLink({
   icon,
   active,
   collapsed,
+  badge,
 }: {
   href: string;
   label: string;
   icon: React.ReactNode;
   active: boolean;
   collapsed: boolean;
+  badge?: number;
 }) {
+  const showBadge = typeof badge === "number" && badge > 0;
   return (
     <Link
       href={href}
-      title={label}
+      title={showBadge ? `${label} (${badge})` : label}
       className={
-        "mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors " +
+        "relative mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors " +
         (active
           ? "bg-white/10 text-[color:var(--ck-text-primary)]"
           : "text-[color:var(--ck-text-secondary)] hover:bg-white/5 hover:text-[color:var(--ck-text-primary)]") +
         (collapsed ? " justify-center px-2" : "")
       }
     >
-      {icon}
+      <span className="relative">
+        {icon}
+        {showBadge && collapsed ? (
+          <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-[var(--ck-accent-red)]" />
+        ) : null}
+      </span>
       {collapsed ? null : <span>{label}</span>}
+      {showBadge && !collapsed ? (
+        <span className="ml-auto rounded-full bg-[var(--ck-accent-red)] px-2 py-0.5 text-xs font-semibold text-white">
+          {badge}
+        </span>
+      ) : null}
     </Link>
   );
 }
@@ -132,6 +145,20 @@ const NAV = [
     ),
   },
   {
+    href: "/workflows",
+    label: "Workflows",
+    icon: (
+      <Icon>
+        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="6" cy="6" r="2" />
+          <circle cx="18" cy="6" r="2" />
+          <circle cx="12" cy="18" r="2" />
+          <path d="M8 6h8M6 8v3a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8M12 13v3" />
+        </svg>
+      </Icon>
+    ),
+  },
+  {
     href: "/settings",
     label: "Settings",
     icon: (
@@ -199,10 +226,28 @@ function TeamSwitcher({ collapsed }: { collapsed: boolean }) {
   );
 }
 
+function useOpenWorkflowSuggestions(pathname: string): number {
+  const [open, setOpen] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    // Refetch on navigation (so creating one clears the badge) + a slow poll
+    // so a freshly-discovered suggestion surfaces without a reload.
+    const load = () =>
+      fetchJson<{ open?: number }>("/api/workflows/suggestions", { cache: "no-store" })
+        .then((r) => { if (!cancelled) setOpen(Number(r.open ?? 0)); })
+        .catch(() => { if (!cancelled) setOpen(0); });
+    void load();
+    const timer = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [pathname]);
+  return open;
+}
+
 function NavWithTeam({ collapsed, pathname }: { collapsed: boolean; pathname: string }) {
   const searchParams = useSearchParams();
   const team = searchParams.get("team");
   const suffix = team ? `?team=${encodeURIComponent(team)}` : "";
+  const openSuggestions = useOpenWorkflowSuggestions(pathname);
   return (
     <nav className="min-h-0 flex-1 overflow-auto p-2">
       {NAV.map((it) => (
@@ -212,6 +257,7 @@ function NavWithTeam({ collapsed, pathname }: { collapsed: boolean; pathname: st
           label={it.label}
           icon={it.icon}
           collapsed={collapsed}
+          badge={it.href === "/workflows" ? openSuggestions : undefined}
           active={it.href === "/" ? pathname === "/" : pathname.startsWith(it.href)}
         />
       ))}
