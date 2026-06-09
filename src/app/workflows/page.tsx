@@ -13,7 +13,14 @@ export type Suggestion = {
   modal_hour_utc?: number | null;
   hint?: string;
   applied?: boolean;
-  workflow?: { steps?: Array<{ id: string; agent?: string | null; action: string }> };
+  workflow?: {
+    steps?: Array<{
+      id: string;
+      agent?: string | null;
+      action: string;
+      input?: { assignee?: string; title?: string };
+    }>;
+  };
 };
 
 export default async function WorkflowsPage() {

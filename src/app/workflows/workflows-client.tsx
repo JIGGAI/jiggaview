@@ -51,12 +51,18 @@ function SuggestionCard({
       </div>
       {steps.length ? (
         <ol className="mt-3 space-y-1 text-xs text-[color:var(--ck-text-secondary)]">
-          {steps.map((step, i) => (
-            <li key={step.id}>
-              <span className="text-[color:var(--ck-text-tertiary)]">{i + 1}.</span>{" "}
-              {step.agent ? <span className="font-mono">{step.agent}</span> : "supervisor"} — {step.action}
-            </li>
-          ))}
+          {steps.map((step, i) => {
+            // Discovered steps are `task.assign` — show the agent it dispatches
+            // to + the task title, not the orchestration plumbing.
+            const who = step.input?.assignee ?? step.agent ?? "supervisor";
+            const what = step.input?.title ?? step.action;
+            return (
+              <li key={step.id}>
+                <span className="text-[color:var(--ck-text-tertiary)]">{i + 1}.</span>{" "}
+                <span className="font-mono">{who}</span> — {what}
+              </li>
+            );
+          })}
         </ol>
       ) : null}
       {suggestion.hint ? (
