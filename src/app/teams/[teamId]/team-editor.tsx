@@ -298,7 +298,13 @@ export default function TeamEditor({
 
   return (
     <div className="w-full">
-      <div className="flex items-start justify-between gap-3">
+      <Link
+        href="/"
+        className="inline-flex items-center gap-1 text-sm text-[color:var(--ck-text-tertiary)] hover:text-[color:var(--ck-text-primary)]"
+      >
+        <span aria-hidden>←</span> Back
+      </Link>
+      <div className="mt-2 flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">
             {String(team.name ?? teamId)}
