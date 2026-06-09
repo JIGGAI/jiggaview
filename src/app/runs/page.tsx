@@ -48,14 +48,21 @@ export default async function RunsPage() {
           <tbody className="divide-y divide-[color:var(--ck-border-subtle)]">
             {events.map((event, index) => {
               const details = event.details ?? {};
-              const summary = ["agent", "task_id", "channel", "name", "key", "title"]
-                .filter((k) => details[k] !== undefined && details[k] !== null)
-                .map((k) => `${k}=${String(details[k]).slice(0, 40)}`)
+              // Error/reason first so failures (e.g. channel.ingest_error)
+              // aren't blank, then the common identifying keys.
+              const keys = [
+                "error", "reason", "detail", "agent", "task_id", "team", "member",
+                "to", "from", "channel", "lane", "to_lane", "recipe", "name", "key", "title",
+              ];
+              const summary = keys
+                .filter((k) => details[k] !== undefined && details[k] !== null && details[k] !== "")
+                .map((k) => `${k}=${String(details[k])}`)
                 .join("  ");
+              const isError = event.status === "error" || event.status === "failed";
               return (
-                <tr key={index}>
+                <tr key={index} className={isError ? "bg-red-500/5" : undefined}>
                   <td className="whitespace-nowrap px-3 py-1.5 text-xs text-[color:var(--ck-text-tertiary)]">
-                    {String(event.ts ?? "").slice(5, 19)}
+                    {String(event.ts ?? "").replace("T", " ").slice(0, 19) || "—"}
                   </td>
                   <td className="px-3 py-1.5 font-mono text-xs">{event.type}</td>
                   <td className="px-3 py-1.5">
@@ -65,12 +72,22 @@ export default async function RunsPage() {
                       </span>
                     ) : null}
                   </td>
-                  <td className="max-w-md truncate px-3 py-1.5 text-xs text-[color:var(--ck-text-secondary)]">
-                    {summary}
+                  <td
+                    className={`max-w-md truncate px-3 py-1.5 text-xs ${isError ? "text-red-200" : "text-[color:var(--ck-text-secondary)]"}`}
+                    title={summary || JSON.stringify(details)}
+                  >
+                    {summary || "—"}
                   </td>
                 </tr>
               );
             })}
+            {events.length === 0 && !error ? (
+              <tr>
+                <td className="px-3 py-6 text-center text-[color:var(--ck-text-tertiary)]" colSpan={4}>
+                  No events yet.
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
