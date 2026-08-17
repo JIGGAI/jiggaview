@@ -159,6 +159,19 @@ const NAV = [
     ),
   },
   {
+    href: "/plugins",
+    label: "Plugins",
+    icon: (
+      <Icon>
+        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M9 3v4M15 3v4" />
+          <path d="M6 7h12v6a6 6 0 0 1-12 0V7Z" />
+          <path d="M12 19v2" />
+        </svg>
+      </Icon>
+    ),
+  },
+  {
     href: "/settings",
     label: "Settings",
     icon: (
