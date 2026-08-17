@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { runJiggaJson } from "@/lib/jigga-cli";
 
-/** GET → the chat-able agent roster: every installed agent + whether it's
- * disabled (the Chat page's picker greys those out — a disabled agent still
- * queues messages but won't run until re-enabled). */
+/** GET → the chat-able agent roster. Carries what the Chat header shows about
+ * who is answering — role, model, team, how many tools it may call — so the
+ * page does not need a second round trip per agent to say anything about it.
+ *
+ * `disabled` is reported rather than filtered here: this route is the roster,
+ * and which agents a given page chooses to offer is that page's decision. */
 
-type AgentRow = { id: string; name?: string; role?: string; default?: boolean };
+type AgentRow = {
+  id: string; name?: string; role?: string; default?: boolean;
+  model?: string | null; team?: string | null; tools?: string[];
+};
 
 export async function GET() {
   try {
@@ -24,6 +30,9 @@ export async function GET() {
         role: a.role ?? "",
         isDefault: Boolean(a.default),
         disabled: disabledSet.has(a.id),
+        model: a.model ?? null,
+        team: a.team ?? null,
+        tools: (a.tools ?? []).length,
       })),
     });
   } catch (e) {

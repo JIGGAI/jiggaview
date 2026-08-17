@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchJson } from "@/lib/fetch-json";
 import type { ChatEntry } from "@/app/api/chat/route";
@@ -22,13 +23,16 @@ type Agent = {
   role: string;
   isDefault: boolean;
   disabled: boolean;
+  model?: string | null;
+  team?: string | null;
+  tools?: number;
 };
 
 // The default agent answers the classic `web` thread (no --agent flag), so
 // chat history from before the picker existed stays attached to it.
 const DEFAULT_THREAD = "web";
 
-function Bubble({ entry }: { entry: ChatEntry }) {
+function Bubble({ entry, pending }: { entry: ChatEntry; pending?: "sending" | "queued" }) {
   const mine = entry.sender !== "agent";
   return (
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
@@ -37,12 +41,17 @@ function Bubble({ entry }: { entry: ChatEntry }) {
           "max-w-[75%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap break-words " +
           (mine
             ? "bg-[color:var(--ck-accent,#e8604c)] text-white rounded-br-sm"
-            : "bg-white/10 text-[color:var(--ck-text-primary)] rounded-bl-sm")
+            : "bg-white/10 text-[color:var(--ck-text-primary)] rounded-bl-sm") +
+          // Queued messages are real and durable, just not started — dimmed
+          // rather than ghosted, because "unsent" would be a lie.
+          (pending === "queued" ? " opacity-70" : "")
         }
       >
         {entry.text}
         <div className={`mt-1 text-[10px] ${mine ? "text-white/70" : "text-[color:var(--ck-text-tertiary)]"}`}>
-          {entry.sender} · {String(entry.ts ?? "").slice(11, 16)}
+          {pending === "queued"
+            ? "queued · waiting for the agent"
+            : `${entry.sender} · ${String(entry.ts ?? "").slice(11, 16)}`}
         </div>
       </div>
     </div>
@@ -56,7 +65,6 @@ function AgentRail({
   threads,
   selectedThread,
   onSelectThread,
-  onNewThread,
 }: {
   agents: Agent[];
   selected: string;
@@ -64,7 +72,6 @@ function AgentRail({
   threads: Conversation[];
   selectedThread: string;
   onSelectThread: (id: string) => void;
-  onNewThread: () => void;
 }) {
   return (
     <div className="w-56 shrink-0 overflow-y-auto border-r border-[color:var(--ck-border-subtle)] p-2">
@@ -76,36 +83,29 @@ function AgentRail({
         return (
           <button
             key={a.id}
-            onClick={() => !a.disabled && onSelect(a.id)}
-            disabled={a.disabled}
-            title={a.disabled ? "Disabled — enable it on the agent page to chat" : a.role}
+            onClick={() => onSelect(a.id)}
+            title={a.role}
             className={
               "mb-1 block w-full rounded-lg px-3 py-2 text-left text-sm transition-colors " +
               (active
                 ? "bg-white/10 text-[color:var(--ck-text-primary)]"
-                : "text-[color:var(--ck-text-secondary)] hover:bg-white/5") +
-              (a.disabled ? " cursor-not-allowed opacity-40" : "")
+                : "text-[color:var(--ck-text-secondary)] hover:bg-white/5")
             }
           >
             <div className="truncate font-medium">{a.name}</div>
             <div className="truncate text-[10px] text-[color:var(--ck-text-tertiary)]">
               {a.isDefault ? "default" : a.id}
-              {a.disabled ? " · disabled" : ""}
             </div>
           </button>
         );
       })}
-      <div className="mt-3 flex items-center justify-between border-t border-[color:var(--ck-border-subtle)] px-2 pb-1 pt-3">
-        <span className="text-xs font-semibold uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">
-          Threads
-        </span>
-        <button
-          onClick={onNewThread}
-          title="Start a new conversation with this agent"
-          className="rounded px-2 text-sm text-[color:var(--ck-text-secondary)] hover:bg-white/10"
-        >
-          +
-        </button>
+      {agents.length === 0 ? (
+        <div className="px-3 py-2 text-xs text-[color:var(--ck-text-tertiary)]">
+          No agents available to chat with.
+        </div>
+      ) : null}
+      <div className="mt-3 border-t border-[color:var(--ck-border-subtle)] px-2 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">
+        Threads
       </div>
       {threads.map((t) => {
         const active = t.conversation_id === selectedThread;
@@ -127,6 +127,73 @@ function AgentRail({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/** Who you are talking to, above the thread.
+ *
+ * The rail says which agent is selected; this says who it IS — the role it was
+ * given, the model answering, and whether it can reach tools — so you are not
+ * guessing why an answer looks the way it does. Edit jumps to the agent's own
+ * page and comes back here.
+ */
+function toolLabel(count: number | undefined): string | null {
+  if (!count) return null;
+  return `${count} tool${count === 1 ? "" : "s"}`;
+}
+
+function AgentHeader({
+  agent,
+  thread,
+  onNewThread,
+}: {
+  agent: Agent | undefined;
+  thread: string;
+  onNewThread: () => void;
+}) {
+  if (!agent) return null;
+  const initials = (agent.name || agent.id).slice(0, 2).toUpperCase();
+  const facts = [agent.role, agent.model, agent.team, toolLabel(agent.tools)].filter(Boolean);
+  return (
+    <div className="flex items-center gap-3 border-b border-[color:var(--ck-border-subtle)] px-4 py-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-[color:var(--ck-text-primary)]">
+        {initials}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className="truncate text-sm font-medium text-[color:var(--ck-text-primary)]">
+            {agent.name}
+          </span>
+          {agent.isDefault ? (
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-[color:var(--ck-text-secondary)]">
+              default
+            </span>
+          ) : null}
+        </div>
+        <div className="truncate text-xs text-[color:var(--ck-text-tertiary)]">
+          {facts.join(" · ")}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="hidden font-mono text-[10px] text-[color:var(--ck-text-tertiary)] sm:inline">
+          {thread}
+        </span>
+        <button
+          onClick={onNewThread}
+          title="Start a fresh conversation with this agent"
+          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+        >
+          + New thread
+        </button>
+        <Link
+          href={`/agents/${encodeURIComponent(agent.id)}?returnTo=/chat`}
+          title="View or edit this agent"
+          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+        >
+          Edit
+        </Link>
+      </div>
     </div>
   );
 }
@@ -186,7 +253,9 @@ export default function ChatPage() {
     (async () => {
       try {
         const json = await fetchJson<{ agents?: Agent[] }>("/api/agents", { cache: "no-store" });
-        const roster = json.agents ?? [];
+        // Disabled agents cannot run, so they are not chat partners. They
+        // are still visible (and re-enablable) on the Agents page.
+        const roster = (json.agents ?? []).filter((a) => !a.disabled);
         // Default agent first, then the rest alphabetically.
         roster.sort((a, b) =>
           a.isDefault !== b.isDefault ? (a.isDefault ? -1 : 1) : a.name.localeCompare(b.name)
@@ -225,11 +294,44 @@ export default function ChatPage() {
 
   async function send() {
     const text = input.trim();
-    if (!text || sending || !current) return;
+    if (!text || !current) return;
+    setInput("");
+
+    // Already waiting on the agent? Hand the message to the runtime WITHOUT
+    // asking it to run now. It lands in the file-backed inbox immediately —
+    // durable, ordered, surviving a refresh or a closed tab — and the
+    // supervisor picks it up on its next tick. Deliberately no nudge: starting
+    // a second run of an agent that is mid-answer is the race this avoids.
+    if (sendingRef.current) {
+      const optimistic: ChatEntry = {
+        id: `queued-${Date.now()}`,
+        conversation_id: conversation,
+        sender: "you",
+        text,
+        ts: new Date().toISOString(),
+      };
+      setEntries((prev) => [...prev, optimistic]);
+      try {
+        await fetchJson("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text,
+            conversation,
+            agent: current.isDefault && conversation === DEFAULT_THREAD ? "" : current.id,
+            wait: false,
+          }),
+        });
+      } catch (e) {
+        setEntries((prev) => prev.filter((entry) => entry.id !== optimistic.id));
+        setError(e instanceof Error ? e.message : String(e));
+      }
+      return;
+    }
+
     setError(null);
     setSending(true);
     sendingRef.current = true;
-    setInput("");
     const optimistic: ChatEntry = {
       id: `optimistic-${Date.now()}`,
       conversation_id: conversation,
@@ -266,6 +368,20 @@ export default function ChatPage() {
     }
   }
 
+  // Pending is derived, not stored: "you said something the agent has not
+  // answered yet" is already in the thread, so it survives a refresh and cannot
+  // drift from what the runtime actually holds.
+  const lastAgentReplyIndex = entries.map((e) => e.sender).lastIndexOf("agent");
+  const firstUnansweredIndex = lastAgentReplyIndex + 1;
+  const queuedCount = Math.max(0, entries.length - firstUnansweredIndex - (sending ? 1 : 0));
+
+  function pendingState(entry: ChatEntry, index: number): "sending" | "queued" | undefined {
+    if (entry.sender === "agent" || index <= lastAgentReplyIndex) return undefined;
+    // The one being answered right now is not "queued" — it is in flight.
+    if (index === firstUnansweredIndex && sending) return "sending";
+    return "queued";
+  }
+
   return (
     <div className="flex h-[calc(100vh-7rem)] w-full flex-col">
       <div>
@@ -286,11 +402,15 @@ export default function ChatPage() {
           threads={agentThreads}
           selectedThread={conversation}
           onSelectThread={setSelectedThread}
-          onNewThread={() =>
-            setSelectedThread(`${selected || "web"}-${Math.random().toString(36).slice(2, 7)}`)
-          }
         />
         <div className="flex min-w-0 flex-1 flex-col">
+          <AgentHeader
+            agent={current}
+            thread={conversation}
+            onNewThread={() =>
+              setSelectedThread(`${selected || "web"}-${Math.random().toString(36).slice(2, 7)}`)
+            }
+          />
           <div className="flex-1 space-y-3 overflow-y-auto p-4">
             {entries.length === 0 && !sending ? (
               <p className="pt-8 text-center text-sm text-[color:var(--ck-text-tertiary)]">
@@ -299,8 +419,8 @@ export default function ChatPage() {
                   : "Loading agents…"}
               </p>
             ) : null}
-            {entries.map((e) => (
-              <Bubble key={e.id} entry={e} />
+            {entries.map((e, i) => (
+              <Bubble key={e.id} entry={e} pending={pendingState(e, i)} />
             ))}
             {sending ? (
               <div className="flex justify-start">
@@ -308,6 +428,12 @@ export default function ChatPage() {
                   <span className="animate-pulse">{current?.name ?? "agent"} is thinking…</span>
                 </div>
               </div>
+            ) : null}
+            {queuedCount > 0 ? (
+              <p className="text-center text-[11px] text-[color:var(--ck-text-tertiary)]">
+                {queuedCount} message{queuedCount === 1 ? "" : "s"} queued — delivered on the
+                supervisor&apos;s next tick, in order.
+              </p>
             ) : null}
             <div ref={endRef} />
           </div>
@@ -328,19 +454,18 @@ export default function ChatPage() {
               onChange={(e) => setInput(e.target.value)}
               placeholder={
                 sending
-                  ? `Waiting for ${current?.name ?? "the agent"}…`
+                  ? `${current?.name ?? "The agent"} is working — your next message queues`
                   : `Message ${current?.name ?? "your agent"}…`
               }
-              disabled={sending}
               autoFocus
               className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)] outline-none placeholder:text-[color:var(--ck-text-tertiary)] focus:border-white/25 disabled:opacity-60"
             />
             <button
               type="submit"
-              disabled={sending || !input.trim() || !current}
+              disabled={!input.trim() || !current}
               className="rounded-lg bg-[color:var(--ck-accent,#e8604c)] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
-              Send
+              {sending ? "Queue" : "Send"}
             </button>
           </form>
         </div>

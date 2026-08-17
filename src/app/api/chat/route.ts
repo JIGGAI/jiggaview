@@ -42,7 +42,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
-    text?: string; conversation?: string; agent?: string;
+    text?: string; conversation?: string; agent?: string; wait?: boolean;
   };
   const text = String(body.text ?? "").trim();
   const conversation = String(body.conversation ?? "web").trim() || "web";
@@ -50,8 +50,15 @@ export async function POST(request: Request) {
   if (!text || text.startsWith("-") || conversation.startsWith("-") || agent.startsWith("-")) {
     return NextResponse.json({ ok: false, error: "text required" }, { status: 400 });
   }
+  // `wait: false` appends to the inbox and returns. Used when the agent is
+  // already working: the message is durable immediately, and the supervisor
+  // picks it up on its next tick. Deliberately does NOT ask the runtime to run
+  // it now — starting a second run of a busy agent is the race we are avoiding,
+  // not a feature.
+  const wait = body.wait !== false;
   const args = [
-    "webchat", "send", "--wait", "--json", "--text", text, "--conversation", conversation,
+    "webchat", "send", "--json", "--text", text, "--conversation", conversation,
+    ...(wait ? ["--wait"] : []),
   ];
   // Address a specific agent (the picker); without it the channel default answers.
   if (agent) args.push("--agent", agent);
