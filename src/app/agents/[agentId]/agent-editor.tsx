@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FileListWithOptionalToggle } from "@/components/FileListWithOptionalToggle";
+import { WorkspaceFiles } from "@/components/WorkspaceFiles";
 import { fetchJson } from "@/lib/fetch-json";
 
 type Tab = "identity" | "config" | "files";
-type FileEntry = { name: string; missing: boolean; required?: boolean };
+type FileEntry = import("@/app/api/files/route").WorkspaceFile;
 
 const inputCls =
   "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]";
@@ -70,7 +70,6 @@ export default function AgentEditor({
   // files
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
-  const [showOptionalFiles, setShowOptionalFiles] = useState(false);
   const [fileName, setFileName] = useState("SOUL.md");
   const [fileContent, setFileContent] = useState("");
   const [fileError, setFileError] = useState<string | null>(null);
@@ -121,7 +120,7 @@ export default function AgentEditor({
     setFilesLoading(true);
     try {
       const out = await fetchJson<{ files: FileEntry[] }>(
-        `/api/files?kind=agent&id=${encodeURIComponent(agentId)}`,
+        `/api/files?kind=agent&id=${encodeURIComponent(agentId)}&tree=1`,
         { cache: "no-store" },
       );
       setFiles(out.files ?? []);
@@ -331,14 +330,13 @@ export default function AgentEditor({
 
         {tab === "files" ? (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <FileListWithOptionalToggle
+            <WorkspaceFiles
               title="Agent files"
+              emptyHint="Nothing here yet — an agent's files appear once it is staffed onto a workspace."
               files={files}
               loading={filesLoading}
-              showOptionalFiles={showOptionalFiles}
-              onShowOptionalChange={setShowOptionalFiles}
-              selectedFileName={fileName}
-              onSelectFile={(n) => void loadFile(n)}
+              selected={fileName}
+              onSelect={(n) => void loadFile(n)}
             />
             <div className="ck-card p-4 lg:col-span-2">
               <div className="flex items-center justify-between">
