@@ -95,14 +95,96 @@ describe("GET ?tree=1", () => {
     expect(body.files).toHaveLength(3);
   });
 
-  it("ignores tree=1 for agents, which have no workspace listing", async () => {
-    await get("?kind=agent&id=lead&tree=1");
-    expect(runJiggaJson).toHaveBeenCalledWith(["agents", "files", "lead", "--json"]);
-  });
-
   it("rejects a flag-shaped id before shelling out", async () => {
     const res = await get("?kind=team&id=--home&tree=1");
     expect(res.status).toBe(400);
     expect(runJiggaJson).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET ?kind=agent&tree=1", () => {
+  const AGENT_MANIFEST = [
+    { name: "SOUL.md", missing: false, required: true },
+    { name: "AGENTS.md", missing: true, required: true },
+    { name: "TOOLS.md", missing: true, required: false },
+  ];
+
+  /** `roles/<agent>/` is the agent's own directory inside a workspace; anything
+   * else in the listing belongs to the team or another member. */
+  function wireAgent({ team = "mt", files = [
+    { name: "roles/lead/SOUL.md", bytes: 364, modified: "2026-08-17T00:00:00+00:00" },
+    { name: "roles/lead/memory/2026-08-16.md", bytes: 90, modified: "2026-08-16T00:00:00+00:00" },
+    { name: "roles/other/SOUL.md", bytes: 12, modified: "2026-08-16T00:00:00+00:00" },
+    { name: "TEAM.md", bytes: 218, modified: "2026-08-16T00:00:00+00:00" },
+  ] } = {}) {
+    runJiggaJson.mockImplementation((args: string[]) => {
+      if (args[0] === "agents" && args[1] === "files") return Promise.resolve(AGENT_MANIFEST);
+      if (args[1] === "list") return Promise.resolve([{ id: "lead", team }]);
+      if (args[1] === "workspace") return Promise.resolve({ files });
+      return Promise.resolve([]);
+    });
+  }
+
+  it("shows the dated memory logs the manifest never mentions", async () => {
+    wireAgent();
+    const body = (await (await get("?kind=agent&id=lead&tree=1")).json()) as {
+      files: { name: string }[];
+    };
+    // Agent-relative, because that is what `agents file get/set` takes.
+    expect(body.files.map((f) => f.name)).toContain("memory/2026-08-16.md");
+  });
+
+  it("shows only that agent's files, not the team's or another member's", async () => {
+    wireAgent();
+    const body = (await (await get("?kind=agent&id=lead&tree=1")).json()) as {
+      files: { name: string }[];
+    };
+    const names = body.files.map((f) => f.name);
+    expect(names).not.toContain("TEAM.md");
+    expect(names.some((n) => n.includes("other"))).toBe(false);
+  });
+
+  it("works for an agent with no team, which owns a workspace of its own", async () => {
+    // `chief` has team: null and lives in workspaces/chief/roles/chief/.
+    runJiggaJson.mockImplementation((args: string[]) => {
+      if (args[0] === "agents" && args[1] === "files") return Promise.resolve(AGENT_MANIFEST);
+      if (args[1] === "list") return Promise.resolve([{ id: "chief", team: null }]);
+      if (args[1] === "workspace") {
+        expect(args[2]).toBe("chief");   // the agent id IS the workspace id
+        return Promise.resolve({ files: [{ name: "roles/chief/memory/2026-06-24.md", bytes: 40 }] });
+      }
+      return Promise.resolve([]);
+    });
+    const body = (await (await get("?kind=agent&id=chief&tree=1")).json()) as {
+      files: { name: string }[];
+    };
+    expect(body.files.map((f) => f.name)).toContain("memory/2026-06-24.md");
+  });
+
+  it("still lists required-but-missing identity files", async () => {
+    wireAgent();
+    const body = (await (await get("?kind=agent&id=lead&tree=1")).json()) as {
+      files: { name: string; missing: boolean; required?: boolean }[];
+    };
+    expect(body.files).toContainEqual({ name: "AGENTS.md", missing: true, required: true });
+  });
+
+  it("falls back to the manifest when no workspace is scaffolded yet", async () => {
+    // A brand-new agent has a manifest and no directory; showing nothing at all
+    // would read as "this agent has no files" rather than "not staffed yet".
+    runJiggaJson.mockImplementation((args: string[]) => {
+      if (args[0] === "agents" && args[1] === "files") return Promise.resolve(AGENT_MANIFEST);
+      if (args[1] === "list") return Promise.resolve([{ id: "fresh", team: null }]);
+      return Promise.reject(new Error("No workspace for 'fresh'"));
+    });
+    const body = (await (await get("?kind=agent&id=fresh&tree=1")).json()) as {
+      files: { name: string }[];
+    };
+    const names = body.files.map((f) => f.name);
+    expect(names).toContain("AGENTS.md");
+    // The regression this shook out live: keeping only the MISSING manifest
+    // entries dropped SOUL.md and MEMORY.md, so the tab lost files it used to
+    // show whenever the workspace lookup failed.
+    expect(names).toContain("SOUL.md");
   });
 });

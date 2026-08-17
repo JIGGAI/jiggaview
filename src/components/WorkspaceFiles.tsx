@@ -45,11 +45,15 @@ export function WorkspaceFiles({
   loading,
   selected,
   onSelect,
+  title = "Workspace files",
+  emptyHint = "No workspace yet.",
 }: {
   files: WorkspaceFile[];
   loading: boolean;
   selected: string;
   onSelect: (name: string) => void;
+  title?: string;
+  emptyHint?: string;
 }) {
   // Group by folder, root first, then alphabetically — the shape of the
   // directory rather than one flat list of slash-separated strings.
@@ -73,16 +77,14 @@ export function WorkspaceFiles({
   }
   if (files.length === 0) {
     return (
-      <div className="ck-card p-4 text-sm text-[color:var(--ck-text-tertiary)]">
-        No workspace yet. Run <span className="font-mono">jigga team init</span> to scaffold one.
-      </div>
+      <div className="ck-card p-4 text-sm text-[color:var(--ck-text-tertiary)]">{emptyHint}</div>
     );
   }
 
   return (
     <div className="ck-card p-4">
       <div className="flex items-baseline justify-between gap-2">
-        <div className="text-sm font-medium">Workspace files</div>
+        <div className="text-sm font-medium">{title}</div>
         <div className="text-xs text-[color:var(--ck-text-tertiary)]">{files.length} files</div>
       </div>
       <div className="mt-3 max-h-[60vh] space-y-4 overflow-y-auto">

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchJson } from "@/lib/fetch-json";
 import { MemoryTab } from "./memory-tab";
-import { WorkspaceFiles } from "./workspace-files";
+import { WorkspaceFiles } from "@/components/WorkspaceFiles";
 
 type Tab = "agents" | "recipe" | "files" | "memory" | "cron";
 type FileEntry = import("@/app/api/files/route").WorkspaceFile;
@@ -467,6 +467,7 @@ export default function TeamEditor({
             loading={filesLoading}
             selected={fileName}
             onSelect={(n) => void loadFile(n)}
+            emptyHint="No workspace yet — run `jigga team init` to scaffold one."
           />
           <div className="ck-card p-4 lg:col-span-2">
             <div className="flex items-center justify-between">
