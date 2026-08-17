@@ -5,9 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchJson } from "@/lib/fetch-json";
 import { MemoryTab } from "./memory-tab";
+import { WorkflowsTab } from "./workflows-tab";
 import { WorkspaceFiles } from "@/components/WorkspaceFiles";
 
-type Tab = "agents" | "recipe" | "files" | "memory" | "cron";
+type Tab = "agents" | "recipe" | "files" | "memory" | "workflows" | "cron";
 type FileEntry = import("@/app/api/files/route").WorkspaceFile;
 type Member = { id?: string; role?: string; required?: boolean };
 type AgentListItem = {
@@ -324,6 +325,7 @@ export default function TeamEditor({
         {tabBtn("recipe", "Recipe")}
         {tabBtn("files", "Files")}
         {tabBtn("memory", "Memory")}
+        {tabBtn("workflows", "Workflows")}
         {tabBtn("cron", "Cron")}
       </div>
 
@@ -491,6 +493,8 @@ export default function TeamEditor({
       {/* Mounted only while selected, so it loads on open and re-reads on
           every return to the tab — an agent may have written since. */}
       {tab === "memory" ? <MemoryTab teamId={teamId} note={note} /> : null}
+
+      {tab === "workflows" ? <WorkflowsTab teamId={teamId} note={note} /> : null}
 
       {tab === "cron" ? (
         <div className="mt-4 space-y-3">
