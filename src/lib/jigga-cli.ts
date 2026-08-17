@@ -39,11 +39,32 @@ export async function runJigga(args: string[]): Promise<JiggaResult> {
   }
 }
 
+/** The most useful sentence a failed command produced.
+ *
+ * Under `--json`, core reports a refusal as JSON on STDOUT with a non-zero exit
+ * ("No workspace for 'ghost'. Run: jigga team init ghost") and leaves stderr
+ * empty. Reading only stderr threw that away and showed the caller a generic
+ * "failed (exit=1)" — the exact case a person needs the real sentence for.
+ */
+function failureMessage(args: string[], res: JiggaResult): string {
+  if (res.stderr.trim()) return res.stderr.trim();
+  const stdout = res.stdout.trim();
+  if (stdout) {
+    try {
+      const parsed = JSON.parse(stdout) as { error?: unknown };
+      if (typeof parsed.error === "string" && parsed.error) return parsed.error;
+    } catch {
+      return stdout; // not JSON — a plain message is still better than nothing
+    }
+  }
+  return `jigga ${args.join(" ")} failed (exit=${res.exitCode})`;
+}
+
 /** Run a jigga command and parse its --json stdout. Throws a readable error on failure. */
 export async function runJiggaJson<T>(args: string[]): Promise<T> {
   const res = await runJigga(args);
   if (!res.ok) {
-    throw new Error(res.stderr.trim() || `jigga ${args.join(" ")} failed (exit=${res.exitCode})`);
+    throw new Error(failureMessage(args, res));
   }
   try {
     return JSON.parse(res.stdout) as T;

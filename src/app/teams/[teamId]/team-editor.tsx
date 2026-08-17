@@ -5,8 +5,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileListWithOptionalToggle } from "@/components/FileListWithOptionalToggle";
 import { fetchJson } from "@/lib/fetch-json";
+import { MemoryTab } from "./memory-tab";
 
-type Tab = "agents" | "recipe" | "files" | "cron";
+type Tab = "agents" | "recipe" | "files" | "memory" | "cron";
 type FileEntry = { name: string; missing: boolean; required?: boolean };
 type Member = { id?: string; role?: string; required?: boolean };
 type AgentListItem = {
@@ -323,6 +324,7 @@ export default function TeamEditor({
         {tabBtn("agents", "Agents")}
         {tabBtn("recipe", "Recipe")}
         {tabBtn("files", "Files")}
+        {tabBtn("memory", "Memory")}
         {tabBtn("cron", "Cron")}
       </div>
 
@@ -488,6 +490,10 @@ export default function TeamEditor({
           </div>
         </div>
       ) : null}
+
+      {/* Mounted only while selected, so it loads on open and re-reads on
+          every return to the tab — an agent may have written since. */}
+      {tab === "memory" ? <MemoryTab teamId={teamId} note={note} /> : null}
 
       {tab === "cron" ? (
         <div className="mt-4 space-y-3">
