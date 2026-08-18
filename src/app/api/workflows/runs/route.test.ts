@@ -76,6 +76,14 @@ async function graphs() {
   return body.runs;
 }
 
+/** The run under test must exist — a missing one is a failed assertion, not an
+ * optional value to thread through every line below. */
+async function graph(runId: string): Promise<Loaded> {
+  const found = (await graphs()).find((run) => run.runId === runId);
+  if (!found) throw new Error(`no run ${runId} in the response`);
+  return found;
+}
+
 beforeEach(() => {
   runJigga.mockReset();
   runJiggaJson.mockReset();
@@ -84,7 +92,7 @@ beforeEach(() => {
 
 describe("the graph", () => {
   it("joins run state to workflow shape", async () => {
-    const dag = (await graphs()).find((r) => r.runId === "run_dag");
+    const dag = await graph("run_dag");
     const byId: Record<string, LoadedNode> = Object.fromEntries(dag.nodes.map((n: LoadedNode) => [n.id, n]));
     expect(byId.build.status).toBe("done");
     expect(byId.build.agent).toBe("dev");          // from the yaml
@@ -94,12 +102,12 @@ describe("the graph", () => {
   it("keeps the error edge distinct from success edges", async () => {
     // An error route drawn like a success route is a picture that lies about
     // what happens next.
-    const dag = (await graphs()).find((r) => r.runId === "run_dag");
+    const dag = await graph("run_dag");
     expect(dag.edges).toContainEqual({ from: "build", to: "rollback", on: "error" });
   });
 
   it("lays a fan-out on one level and rejoins the diamond", async () => {
-    const dag = (await graphs()).find((r) => r.runId === "run_dag");
+    const dag = await graph("run_dag");
     const depth: Record<string, number> = Object.fromEntries(dag.nodes.map((n: LoadedNode) => [n.id, n.depth]));
     expect(depth.build).toBe(0);
     expect([depth.test_unit, depth.test_e2e, depth.rollback]).toEqual([1, 1, 1]);
@@ -108,15 +116,15 @@ describe("the graph", () => {
   });
 
   it("carries the approval code and whether anyone was asked", async () => {
-    const dag = (await graphs()).find((r) => r.runId === "run_dag");
+    const dag = await graph("run_dag");
     const approve = dag.nodes.find((n: LoadedNode) => n.id === "approve");
     expect(approve).toMatchObject({ approvalCode: "AB12", delivery: "undelivered" });
-    expect(approve.deliveryError).toContain("no owner conversation");
+    expect(approve?.deliveryError).toContain("no owner conversation");
   });
 
   it("draws a v1 run as the chain it is", async () => {
     // v1 has no edges; consecutive steps imply them.
-    const v1 = (await graphs()).find((r) => r.runId === "run_v1");
+    const v1 = await graph("run_v1");
     expect(v1.engine).toBe("v1");
     expect(v1.edges).toEqual([{ from: "a", to: "b", on: "success" }]);
     expect(v1.nodes.map((n: LoadedNode) => n.status)).toEqual(["done", "done"]);
@@ -126,7 +134,7 @@ describe("the graph", () => {
     // The run happened; the definition was deleted afterwards. Losing the whole
     // history to that is worse than drawing what state remains.
     runJigga.mockResolvedValue({ ok: false, exitCode: 1, stdout: "gone", stderr: "" });
-    const dag = (await graphs()).find((r) => r.runId === "run_dag");
+    const dag = await graph("run_dag");
     expect(dag.nodes.map((n: LoadedNode) => n.id).sort()).toContain("approve");
     expect(dag.edges).toEqual([]);
   });
