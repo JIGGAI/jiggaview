@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runJigga } from "@/lib/jigga-cli";
+import { runJigga, runJiggaWithInput } from "@/lib/jigga-cli";
 
 /** One workflow's definition: read it, write it back.
  *
@@ -35,8 +35,8 @@ export async function PUT(request: Request, context: { params: Promise<{ workflo
   const { workflowId } = await context.params;
   if (badArg(workflowId)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
   const body = (await request.json().catch(() => ({}))) as { content?: string };
-  const res = await runJigga(["workflow", "save", workflowId, "--content",
-                              String(body.content ?? ""), "--json"]);
+  const res = await runJiggaWithInput(["workflow", "save", workflowId, "--json"],
+                                      String(body.content ?? ""));
   if (!res.ok) {
     return NextResponse.json(
       { error: res.stdout.trim() || res.stderr.trim() || "save failed" },

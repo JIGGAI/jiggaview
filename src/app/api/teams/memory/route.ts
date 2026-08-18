@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runJigga, runJiggaJson } from "@/lib/jigga-cli";
+import { runJigga, runJiggaJson, runJiggaWithInput } from "@/lib/jigga-cli";
 
 /** The Memory tab ↔ team memory boundary (core `jigga team memory`).
  *
@@ -74,13 +74,15 @@ export async function POST(request: Request) {
   if (badArg(type)) {
     return NextResponse.json({ error: "invalid type" }, { status: 400 });
   }
-  const args = ["team", "memory", "add", teamId, "--text", text, "--type", type, "--json"];
+  const args = ["team", "memory", "add", teamId, "--type", type, "--json"];
   for (const tag of body.tags ?? []) {
     const clean = String(tag).trim();
     // Skip rather than reject: a stray tag should not lose the user's text.
     if (clean && !clean.startsWith("-")) args.push("--tag", clean);
   }
-  return respond(await runJigga(args));
+  // The entry text goes on stdin, not argv: a durable memory entry is content,
+  // and argv is world-readable through /proc.
+  return respond(await runJiggaWithInput(args, text));
 }
 
 function respond(res: { ok: boolean; stdout: string; stderr: string; exitCode: number }) {

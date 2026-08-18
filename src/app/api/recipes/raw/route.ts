@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runJigga } from "@/lib/jigga-cli";
+import { runJigga, runJiggaWithInput } from "@/lib/jigga-cli";
 
 /** GET ?name=[&bundled=1] → raw recipe markdown (your copy, or the shipped
  * default with bundled=1 — for diffing against a new release);
@@ -23,7 +23,8 @@ export async function PUT(request: Request) {
   if (!name || name.startsWith("-")) {
     return NextResponse.json({ ok: false, error: "name required" }, { status: 400 });
   }
-  const res = await runJigga(["recipes", "save", name, "--content", String(body.content ?? ""), "--json"]);
+  const res = await runJiggaWithInput(["recipes", "save", name, "--json"],
+                                      String(body.content ?? ""));
   if (!res.ok) {
     return NextResponse.json(
       { ok: false, error: res.stderr.trim() || res.stdout.trim() || "save failed" },

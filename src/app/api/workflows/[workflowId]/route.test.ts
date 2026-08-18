@@ -9,10 +9,12 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
  */
 
 const runJigga = vi.fn();
+const runJiggaWithInput = vi.fn();
 
 vi.mock("@/lib/jigga-cli", () => ({
   runJigga: (args: string[]) => runJigga(args),
   runJiggaJson: vi.fn(),
+  runJiggaWithInput: (args: string[], input: string) => runJiggaWithInput(args, input),
 }));
 
 const { GET, PUT } = await import("./route");
@@ -22,7 +24,9 @@ const YAML = "id: release_flow\nname: Release\n";
 
 beforeEach(() => {
   runJigga.mockReset();
+  runJiggaWithInput.mockReset();
   runJigga.mockResolvedValue({ ok: true, exitCode: 0, stdout: YAML, stderr: "" });
+  runJiggaWithInput.mockResolvedValue({ ok: true, exitCode: 0, stdout: "{}", stderr: "" });
 });
 
 describe("GET", () => {
@@ -47,21 +51,24 @@ describe("GET", () => {
 });
 
 describe("PUT", () => {
-  it("saves through core so the same validator applies", async () => {
-    runJigga.mockResolvedValue({ ok: true, exitCode: 0, stdout: '{"workflow":"release_flow"}', stderr: "" });
+  it("saves through core so the same validator applies, with the yaml on stdin", async () => {
+    // On stdin rather than argv: argv is world-readable through /proc, and a
+    // workflow definition can name secrets, hosts and paths.
+    runJiggaWithInput.mockResolvedValue({ ok: true, exitCode: 0, stdout: '{"workflow":"release_flow"}', stderr: "" });
     const res = await PUT(new Request("http://localhost/x", {
       method: "PUT", body: JSON.stringify({ content: YAML }),
     }), params("release_flow"));
-    expect(runJigga).toHaveBeenCalledWith([
-      "workflow", "save", "release_flow", "--content", YAML, "--json",
-    ]);
+    const [args, input] = runJiggaWithInput.mock.calls[0];
+    expect(args).toEqual(["workflow", "save", "release_flow", "--json"]);
+    expect(input).toBe(YAML);
+    expect(args.join(" ")).not.toContain("release_flow\nname");
     expect(res.status).toBe(200);
   });
 
   it("surfaces a refused cycle rather than a generic failure", async () => {
     // A graph editor can draw what a runtime cannot run; the reason is the
     // useful part, and it must come from the validator the supervisor uses.
-    runJigga.mockResolvedValue({
+    runJiggaWithInput.mockResolvedValue({
       ok: false, exitCode: 1,
       stdout: "! Not saved — workflow release_flow: workflow graph has a cycle", stderr: "",
     });
@@ -77,6 +84,6 @@ describe("PUT", () => {
       method: "PUT", body: JSON.stringify({ content: YAML }),
     }), params("--home"));
     expect(res.status).toBe(400);
-    expect(runJigga).not.toHaveBeenCalled();
+    expect(runJiggaWithInput).not.toHaveBeenCalled();
   });
 });

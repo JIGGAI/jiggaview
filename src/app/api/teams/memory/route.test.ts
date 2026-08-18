@@ -8,10 +8,12 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const runJigga = vi.fn();
 const runJiggaJson = vi.fn();
+const runJiggaWithInput = vi.fn();
 
 vi.mock("@/lib/jigga-cli", () => ({
   runJigga: (args: string[]) => runJigga(args),
   runJiggaJson: (args: string[]) => runJiggaJson(args),
+  runJiggaWithInput: (args: string[], input: string) => runJiggaWithInput(args, input),
 }));
 
 const { GET, POST } = await import("./route");
@@ -32,7 +34,9 @@ function post(body: unknown) {
 beforeEach(() => {
   runJigga.mockReset();
   runJiggaJson.mockReset();
+  runJiggaWithInput.mockReset();
   runJigga.mockResolvedValue(ok("{}"));
+  runJiggaWithInput.mockResolvedValue(ok("{}"));
   runJiggaJson.mockResolvedValue([]);
 });
 
@@ -73,36 +77,46 @@ describe("GET", () => {
 });
 
 describe("POST — add", () => {
-  it("passes text, type and each tag", async () => {
-    runJigga.mockResolvedValue(ok(JSON.stringify({ id: "mem_2" })));
+  it("passes type and each tag, with the entry text on stdin", async () => {
+    // The text is content, and argv is world-readable through /proc — a
+    // durable memory entry has no business in `ps`.
+    runJiggaWithInput.mockResolvedValue(ok(JSON.stringify({ id: "mem_2" })));
     const res = await post({ teamId: "mt", text: "  ships Tuesday  ", type: "decision", tags: ["launch", "timing"] });
-    expect(runJigga).toHaveBeenCalledWith([
-      "team", "memory", "add", "mt",
-      "--text", "ships Tuesday",
-      "--type", "decision", "--json",
+    const [args, input] = runJiggaWithInput.mock.calls[0];
+    expect(args).toEqual([
+      "team", "memory", "add", "mt", "--type", "decision", "--json",
       "--tag", "launch", "--tag", "timing",
     ]);
+    expect(input).toBe("ships Tuesday");
+    expect(args.join(" ")).not.toContain("ships Tuesday");
     await expect(res.json()).resolves.toEqual({ id: "mem_2" });
   });
 
   it("defaults the type to fact", async () => {
     await post({ teamId: "mt", text: "a thing" });
-    expect(runJigga.mock.calls[0][0]).toContain("fact");
+    expect(runJiggaWithInput.mock.calls[0][0]).toContain("fact");
   });
 
   it("drops a flag-shaped tag but still saves the text", async () => {
     // Losing what someone typed because one tag was odd is the worse outcome.
     await post({ teamId: "mt", text: "keep me", tags: ["good", "--bad"] });
-    const args = runJigga.mock.calls[0][0];
-    expect(args).toContain("keep me");
+    const [args, input] = runJiggaWithInput.mock.calls[0];
+    expect(input).toBe("keep me");
     expect(args).toContain("good");
     expect(args).not.toContain("--bad");
+  });
+
+  it("keeps a message that starts with a dash, now that it is not argv", async () => {
+    // "- ships Tuesday" is a bullet, not a flag. On stdin it cannot be read as
+    // one, so there is nothing left to defend against by rejecting it.
+    await post({ teamId: "mt", text: "- ships Tuesday" });
+    expect(runJiggaWithInput.mock.calls[0][1]).toBe("- ships Tuesday");
   });
 
   it("rejects empty text", async () => {
     const res = await post({ teamId: "mt", text: "   " });
     expect(res.status).toBe(400);
-    expect(runJigga).not.toHaveBeenCalled();
+    expect(runJiggaWithInput).not.toHaveBeenCalled();
   });
 });
 

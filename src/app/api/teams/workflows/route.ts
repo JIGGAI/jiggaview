@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { parse as parseYaml } from "yaml";
-import { runJigga, runJiggaJson } from "@/lib/jigga-cli";
+import { runJigga, runJiggaJson, runJiggaWithInput } from "@/lib/jigga-cli";
 
 /** Which workflows belong to a team, and their yaml.
  *
@@ -155,8 +155,8 @@ export async function PUT(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { id?: string; content?: string };
   const id = String(body.id ?? "").trim();
   if (badArg(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
-  const res = await runJigga(["workflow", "save", id, "--content", String(body.content ?? ""),
-                              "--json"]);
+  const res = await runJiggaWithInput(["workflow", "save", id, "--json"],
+                                      String(body.content ?? ""));
   if (!res.ok) {
     return NextResponse.json(
       { error: res.stdout.trim() || res.stderr.trim() || "save failed" },

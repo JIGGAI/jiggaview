@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runJigga, runJiggaJson } from "@/lib/jigga-cli";
+import { runJigga, runJiggaJson, runJiggaWithInput } from "@/lib/jigga-cli";
 
 const BASE: Record<string, string[]> = { agent: ["agents"], team: ["team"] };
 
@@ -138,7 +138,8 @@ export async function PUT(request: Request) {
   if (!base || !id || !name || id.startsWith("-") || name.startsWith("-")) {
     return NextResponse.json({ ok: false, error: "kind, id and name required" }, { status: 400 });
   }
-  const res = await runJigga([...base, "file", "set", id, name, "--content", String(body.content ?? "")]);
+  const res = await runJiggaWithInput([...base, "file", "set", id, name],
+                                      String(body.content ?? ""));
   if (!res.ok) {
     return NextResponse.json(
       { ok: false, error: res.stderr.trim() || res.stdout.trim() || "write failed" },
