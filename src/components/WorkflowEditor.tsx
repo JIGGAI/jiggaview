@@ -65,7 +65,14 @@ function depths(ids: string[], edges: GraphEdge[]): Record<string, number> {
   return depth;
 }
 
-export default function EditorClient({ workflowId }: { workflowId: string }) {
+export function WorkflowEditor({
+  workflowId,
+  onSaved,
+}: {
+  workflowId: string;
+  /** The team tab refreshes its own list when a workflow changes under it. */
+  onSaved?: () => void;
+}) {
   const [doc, setDoc] = useState<WorkflowDoc | null>(null);
   const [raw, setRaw] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
@@ -218,6 +225,7 @@ export default function EditorClient({ workflowId }: { workflowId: string }) {
       });
       setRaw(content);
       setMessage("Saved. The supervisor picks it up on its next tick.");
+      onSaved?.();
     } catch (e) {
       // Core refuses anything that would not run and says why — a dangling
       // edge, a cycle, an id that disagrees with the file.

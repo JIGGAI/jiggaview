@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchJson } from "@/lib/fetch-json";
 import { WorkflowGraph } from "@/components/WorkflowGraph";
@@ -178,6 +179,12 @@ export default function RunsClient({ workflowId }: { workflowId?: string }) {
                     {run.engine}
                   </span>
                 </div>
+                <Link
+                  href={`/workflows/${encodeURIComponent(run.workflowId)}`}
+                  className="text-xs text-[color:var(--ck-text-tertiary)] hover:underline"
+                >
+                  open workflow →
+                </Link>
                 <div className="mt-0.5 text-xs text-[color:var(--ck-text-tertiary)]">
                   {when(run.startedAt)}
                   {run.completedAt ? ` → ${when(run.completedAt)}` : ""}

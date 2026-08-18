@@ -19,6 +19,9 @@ const NODE_H = 56;
 const GAP_X = 76;
 const GAP_Y = 22;
 const PAD = 16;
+// Past this, scaling to fit makes the labels unreadable, so scrolling is the
+// kinder failure.
+const FIT_WIDTH_LIMIT = 1400;
 
 const STATUS_FILL: Record<string, string> = {
   done: "rgba(16,185,129,0.16)",
@@ -93,10 +96,22 @@ export function WorkflowGraph({
   const width = Math.max(...placed.map((n) => n.x + NODE_W), 200) + PAD;
   const height = Math.max(...placed.map((n) => n.y + NODE_H), 80) + PAD;
 
+  // A deep workflow is wider than any panel it is shown in, and a diagram that
+  // runs off the edge hides the half you have not seen — the end of the graph,
+  // which is usually where the interesting node is. Scale to fit the container
+  // (never UP past natural size, or a two-node workflow looks absurd) and keep
+  // horizontal scroll for graphs too wide to stay legible when scaled.
+  const scrollable = width > FIT_WIDTH_LIMIT;
   return (
-    <div className="overflow-x-auto">
-      <svg width={width} height={height} role="img"
-           aria-label={`Workflow ${run.workflowId}, run ${run.runId}`}>
+    <div className={scrollable ? "overflow-x-auto" : ""}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        width={scrollable ? width : undefined}
+        height={scrollable ? height : undefined}
+        style={scrollable ? undefined : { width: "100%", maxWidth: width, height: "auto" }}
+        role="img"
+        aria-label={`Workflow ${run.workflowId}, run ${run.runId}`}
+      >
         <defs>
           <marker id="wf-arrow" markerWidth="9" markerHeight="9" refX="8" refY="3"
                   orient="auto" markerUnits="strokeWidth">
