@@ -175,6 +175,14 @@ export function WorkflowGraph({
                     fill="currentColor" opacity="0.65">
                 {short(node.type === "human_approval" ? "approval" : node.action || node.type, 26)}
               </text>
+              {node.output ? (
+                // A node with a deliverable is worth finding without clicking
+                // every box to see which one produced the file you want.
+                <text x={node.x + NODE_W - 12} y={node.y + NODE_H - 12} fontSize="9"
+                      textAnchor="end" fill="currentColor" opacity="0.5">
+                  {short(node.output, 18)}
+                </text>
+              ) : null}
               {!neutral && node.status === "awaiting_approval" ? (
                 <text x={node.x + NODE_W - 12} y={node.y + 18} fontSize="14" textAnchor="end">
                   ⏸

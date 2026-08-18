@@ -26,6 +26,10 @@ export type GraphNode = {
   deliveryError: string | null;
   /** Layer in the DAG, for layout. */
   depth: number;
+  /** The file this node writes (`output:` in the yaml), if any. */
+  output: string | null;
+  /** Files this node READS: `input:` values naming another node's output. */
+  inputs: string[];
 };
 
 export type GraphEdge = { from: string; to: string; on: string };
@@ -81,8 +85,29 @@ function depths(nodeIds: string[], edges: GraphEdge[]): Record<string, number> {
   return depth;
 }
 
-async function topology(workflowId: string): Promise<{ nodes: Record<string, {
-  type: string; agent: string | null; action: string | null }>; edges: GraphEdge[] }> {
+type NodeShape = {
+  type: string; agent: string | null; action: string | null;
+  output: string | null; inputs: string[];
+};
+
+/** Which of a node's `input:` values name a file rather than carry a literal.
+ *
+ * A node's input is a mix of both — `prompt:` is the instruction text, while
+ * `core_message: core_message.md` is a reference to what an upstream node
+ * wrote. The honest test is not "does it look like a filename" but "does some
+ * node in this workflow declare it as its output", which is exactly what the
+ * runtime resolves against.
+ */
+function inputFiles(input: unknown, outputs: Set<string>): string[] {
+  if (!input || typeof input !== "object") return [];
+  return [...new Set(
+    Object.values(input as Record<string, unknown>)
+      .filter((v): v is string => typeof v === "string" && outputs.has(v)),
+  )];
+}
+
+async function topology(workflowId: string): Promise<{ nodes: Record<string, NodeShape>;
+                                                       edges: GraphEdge[] }> {
   const res = await runJigga(["workflow", "cat", workflowId]);
   if (!res.ok) return { nodes: {}, edges: [] };
   let doc: Record<string, unknown>;
@@ -91,18 +116,24 @@ async function topology(workflowId: string): Promise<{ nodes: Record<string, {
   } catch {
     return { nodes: {}, edges: [] };
   }
-  const nodes: Record<string, { type: string; agent: string | null; action: string | null }> = {};
+  const nodes: Record<string, NodeShape> = {};
   // v2 `nodes`, else v1 `steps` — a step is a node with one implicit edge to
   // the next, which is exactly how it gets drawn below.
   const raw = (Array.isArray(doc.nodes) && doc.nodes.length ? doc.nodes : doc.steps) as
-    | { id?: string; type?: string; agent?: string; action?: string }[]
+    | { id?: string; type?: string; agent?: string; action?: string;
+        output?: string; input?: unknown }[]
     | undefined;
+  const declared = new Set(
+    (raw ?? []).map((item) => (item?.output ? String(item.output) : "")).filter(Boolean),
+  );
   for (const item of raw ?? []) {
     if (!item?.id) continue;
     nodes[String(item.id)] = {
       type: String(item.type ?? "tool"),
       agent: item.agent ? String(item.agent) : null,
       action: item.action ? String(item.action) : null,
+      output: item.output ? String(item.output) : null,
+      inputs: inputFiles(item.input, declared),
     };
   }
   let edges: GraphEdge[] = [];
@@ -157,6 +188,8 @@ export async function GET(request: Request) {
           agent: shape.nodes[id]?.agent ?? null,
           action: shape.nodes[id]?.action ?? null,
           status: state[id]?.status ?? (run.engine === "v2" ? "pending" : "done"),
+          output: shape.nodes[id]?.output ?? null,
+          inputs: shape.nodes[id]?.inputs ?? [],
           approvalCode: state[id]?.approval_code ?? null,
           delivery: state[id]?.delivery ?? null,
           deliveryError: state[id]?.delivery_error ?? null,

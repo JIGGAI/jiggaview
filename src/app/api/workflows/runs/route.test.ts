@@ -191,3 +191,55 @@ describe("answering an approval", () => {
     expect(runJigga).not.toHaveBeenCalled();
   });
 });
+
+describe("node file references", () => {
+  const WITH_FILES = `
+id: team_launch
+steps:
+  - id: core_message
+    action: draft_with_model
+    input: {prompt: "Distill the launch message."}
+    output: core_message.md
+  - id: copy
+    action: draft_with_model
+    input: {prompt: "Write a tweet.", core_message: core_message.md}
+    output: copy.md
+`;
+
+  function wireFiles() {
+    runJiggaJson.mockResolvedValue([
+      { id: "run_files", workflow_id: "team_launch", status: "completed",
+        nodes: { core_message: { status: "done" }, copy: { status: "done" } } },
+    ]);
+    runJigga.mockResolvedValue({ ok: true, exitCode: 0, stdout: WITH_FILES, stderr: "" });
+  }
+
+  it("carries each node's output file", async () => {
+    wireFiles();
+    const body = await (await GET(new Request("https://x/api/workflows/runs"))).json();
+    const nodes: LoadedNode[] = body.runs[0].nodes;
+    expect(nodes.find((n) => n.id === "copy")?.output).toBe("copy.md");
+  });
+
+  it("counts an input as a file only when a node declares it as an output", async () => {
+    // `prompt:` is instruction text and `core_message:` is a reference to what
+    // an upstream node wrote. Guessing by "looks like a filename" would list
+    // the prompt as a file and offer to open something that does not exist.
+    wireFiles();
+    const body = await (await GET(new Request("https://x/api/workflows/runs"))).json();
+    const nodes: LoadedNode[] = body.runs[0].nodes;
+    expect(nodes.find((n) => n.id === "copy")?.inputs).toEqual(["core_message.md"]);
+    expect(nodes.find((n) => n.id === "core_message")?.inputs).toEqual([]);
+  });
+
+  it("leaves a node with no output null rather than inventing a name", async () => {
+    runJiggaJson.mockResolvedValue([
+      { id: "r", workflow_id: "w", status: "completed", nodes: { a: { status: "done" } } },
+    ]);
+    runJigga.mockResolvedValue({ ok: true, exitCode: 0,
+      stdout: "id: w\nsteps:\n- {id: a, action: x}\n", stderr: "" });
+    const body = await (await GET(new Request("https://x/api/workflows/runs"))).json();
+    expect(body.runs[0].nodes[0].output).toBeNull();
+    expect(body.runs[0].nodes[0].inputs).toEqual([]);
+  });
+});

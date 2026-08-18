@@ -5,7 +5,7 @@
  * the same audited, policy-gated commands a human would run. The supervisor
  * executes; jiggaview only queues and renders.
  */
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -37,6 +37,30 @@ export async function runJigga(args: string[]): Promise<JiggaResult> {
       stderr: String(err.stderr ?? ""),
     };
   }
+}
+
+/** Run a jigga command with `input` on STDIN.
+ *
+ * Not a convenience: the alternative is passing the body as an argv value, and
+ * argv is world-readable through /proc on the machine this runs on. A workflow
+ * artifact is a deliverable — a draft, a summary, whatever the run produced —
+ * and it has no business showing up in `ps` for every other account on the box.
+ */
+export async function runJiggaWithInput(args: string[], input: string): Promise<JiggaResult> {
+  return new Promise((resolve) => {
+    const child = spawn(JIGGA_BIN, args, { env: process.env, timeout: TIMEOUT_MS });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+    child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+    // The child may exit (or refuse) before draining stdin; that surfaces as
+    // EPIPE on the write, which is the command's own failure to report, not a
+    // crash of the server handling the request.
+    child.stdin.on("error", () => {});
+    child.on("error", (err) => resolve({ ok: false, exitCode: 1, stdout, stderr: String(err.message) }));
+    child.on("close", (code) => resolve({ ok: code === 0, exitCode: code ?? 1, stdout, stderr }));
+    child.stdin.end(input);
+  });
 }
 
 /** The most useful sentence a failed command produced.
