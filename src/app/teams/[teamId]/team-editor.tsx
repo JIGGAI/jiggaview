@@ -319,7 +319,7 @@ export default function TeamEditor({
         </button>
       </div>
 
-      <div className="sticky top-0 z-10 mt-4 flex gap-2 bg-[color:var(--ck-bg-primary)] py-2">
+      <div className="mt-4 flex gap-2 py-2">
         {TEAM_TAB_LIST.map((entry) => tabBtn(entry.id as TeamTabId, entry.label))}
       </div>
 

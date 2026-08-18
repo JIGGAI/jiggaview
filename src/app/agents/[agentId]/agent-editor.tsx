@@ -210,7 +210,7 @@ export default function AgentEditor({
         </div>
       </div>
 
-      <div className="sticky top-0 z-10 mt-4 flex gap-2 bg-[color:var(--ck-bg-primary)] py-2">
+      <div className="mt-4 flex gap-2 py-2">
         {tabBtn("identity", "Identity")}
         {tabBtn("config", "Config")}
         {tabBtn("files", "Files")}
