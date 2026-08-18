@@ -4,12 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchJson } from "@/lib/fetch-json";
-import { MemoryTab } from "./memory-tab";
-import { WorkflowsTab } from "./workflows-tab";
-import { SkillsTab } from "./skills-tab";
 import { WorkspaceFiles } from "@/components/WorkspaceFiles";
+import { DEFAULT_TEAM_TAB, TEAM_TAB_LIST, type TeamTabId } from "./team-tabs";
 
-type Tab = "agents" | "recipe" | "files" | "memory" | "workflows" | "skills" | "cron";
+type Tab = TeamTabId;
 type FileEntry = import("@/app/api/files/route").WorkspaceFile;
 type Member = { id?: string; role?: string; required?: boolean };
 type AgentListItem = {
@@ -40,7 +38,7 @@ export default function TeamEditor({
   disabled: boolean;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("agents");
+  const [tab, setTab] = useState<Tab>(DEFAULT_TEAM_TAB);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -322,13 +320,7 @@ export default function TeamEditor({
       </div>
 
       <div className="sticky top-0 z-10 mt-4 flex gap-2 bg-[color:var(--ck-bg-primary)] py-2">
-        {tabBtn("agents", "Agents")}
-        {tabBtn("recipe", "Recipe")}
-        {tabBtn("files", "Files")}
-        {tabBtn("memory", "Memory")}
-        {tabBtn("workflows", "Workflows")}
-        {tabBtn("skills", "Skills & tools")}
-        {tabBtn("cron", "Cron")}
+        {TEAM_TAB_LIST.map((entry) => tabBtn(entry.id as TeamTabId, entry.label))}
       </div>
 
       {message ? (
@@ -494,11 +486,11 @@ export default function TeamEditor({
 
       {/* Mounted only while selected, so it loads on open and re-reads on
           every return to the tab — an agent may have written since. */}
-      {tab === "memory" ? <MemoryTab teamId={teamId} note={note} /> : null}
-
-      {tab === "workflows" ? <WorkflowsTab teamId={teamId} note={note} /> : null}
-
-      {tab === "skills" ? <SkillsTab teamId={teamId} note={note} /> : null}
+      {/* Self-contained tabs render straight from the registry. Mounted only
+          while selected, so each loads on open and re-reads on every return. */}
+      {TEAM_TAB_LIST.map(({ id, Component }) =>
+        Component && tab === id ? <Component key={id} teamId={teamId} note={note} /> : null,
+      )}
 
       {tab === "cron" ? (
         <div className="mt-4 space-y-3">
