@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import { MemoryTab } from "./memory-tab";
 import { WorkflowsTab } from "./workflows-tab";
 import { SkillsTab } from "./skills-tab";
+import { DeliverablesTab } from "./deliverables-tab";
 
 /** The team page's tabs, in order.
  *
@@ -34,6 +35,7 @@ export const TEAM_TABS = [
   { id: "memory", label: "Memory", Component: MemoryTab },
   { id: "workflows", label: "Workflows", Component: WorkflowsTab },
   { id: "skills", label: "Skills & tools", Component: SkillsTab },
+  { id: "deliverables", label: "Deliverables", Component: DeliverablesTab },
   { id: "cron", label: "Cron" },
 ] as const satisfies readonly TeamTab[];
 

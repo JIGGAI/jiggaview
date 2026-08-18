@@ -25,7 +25,7 @@ describe("the team tab registry", () => {
   it("keeps the order it declares", () => {
     // The order IS the UI; a set would lose it.
     expect(TEAM_TAB_LIST.map((t) => t.id)).toEqual([
-      "agents", "recipe", "files", "memory", "workflows", "skills", "cron",
+      "agents", "recipe", "files", "memory", "workflows", "skills", "deliverables", "cron",
     ]);
   });
 
@@ -37,7 +37,7 @@ describe("the team tab registry", () => {
     // These three carry their own component; the rest still read the editor's
     // local state and render there. That split is the honest current state.
     const withComponent = TEAM_TAB_LIST.filter((t) => t.Component).map((t) => t.id);
-    expect(withComponent).toEqual(["memory", "workflows", "skills"]);
+    expect(withComponent).toEqual(["memory", "workflows", "skills", "deliverables"]);
   });
 
   it("exposes the same entries through both views", () => {
