@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { runJiggaJson } from "@/lib/jigga-cli";
 import WorkflowsClient from "./workflows-client";
 import RunsClient from "./runs-client";
@@ -64,12 +65,14 @@ export default async function WorkflowsPage() {
         <ul className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {installed.map((workflow) => (
             <li key={workflow.id} className="ck-card flex items-center justify-between gap-2 p-3">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium">{workflow.name || workflow.id}</div>
+              <Link href={`/workflows/${encodeURIComponent(workflow.id)}`} className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium hover:underline">
+                  {workflow.name || workflow.id}
+                </div>
                 <div className="truncate font-mono text-[10px] text-[color:var(--ck-text-tertiary)]">
                   {workflow.id}
                 </div>
-              </div>
+              </Link>
               {workflow.status ? (
                 <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-[color:var(--ck-text-secondary)]">
                   {workflow.status}

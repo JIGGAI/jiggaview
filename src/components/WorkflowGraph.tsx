@@ -80,10 +80,13 @@ export function WorkflowGraph({
   run,
   selected,
   onSelect,
+  neutral = false,
 }: {
   run: RunGraph;
   selected: string | null;
   onSelect: (nodeId: string) => void;
+  /** Editing a DEFINITION: there is no run, so status colour would be a lie. */
+  neutral?: boolean;
 }) {
   const placed = place(run.nodes);
   const byId = new Map(placed.map((node) => [node.id, node]));
@@ -132,11 +135,15 @@ export function WorkflowGraph({
             <g key={node.id} onClick={() => onSelect(node.id)} style={{ cursor: "pointer" }}>
               <rect
                 x={node.x} y={node.y} width={NODE_W} height={NODE_H} rx={10}
-                fill={STATUS_FILL[node.status] ?? STATUS_FILL.pending}
-                stroke={isSelected ? "rgba(255,255,255,0.9)" : STATUS_STROKE[node.status] ?? STATUS_STROKE.pending}
+                fill={neutral ? STATUS_FILL.pending : STATUS_FILL[node.status] ?? STATUS_FILL.pending}
+                stroke={isSelected
+                  ? "rgba(255,255,255,0.9)"
+                  : neutral
+                    ? STATUS_STROKE.pending
+                    : STATUS_STROKE[node.status] ?? STATUS_STROKE.pending}
                 strokeWidth={isSelected ? 2 : 1.25}
               />
-              {node.status === "running" ? (
+              {!neutral && node.status === "running" ? (
                 // The one thing a static picture cannot say: this is happening
                 // NOW. Cheap CSS-free pulse via SMIL, no re-render needed.
                 <rect x={node.x} y={node.y} width={NODE_W} height={NODE_H} rx={10}
@@ -153,7 +160,7 @@ export function WorkflowGraph({
                     fill="currentColor" opacity="0.65">
                 {short(node.type === "human_approval" ? "approval" : node.action || node.type, 26)}
               </text>
-              {node.status === "awaiting_approval" ? (
+              {!neutral && node.status === "awaiting_approval" ? (
                 <text x={node.x + NODE_W - 12} y={node.y + 18} fontSize="14" textAnchor="end">
                   ⏸
                 </text>
