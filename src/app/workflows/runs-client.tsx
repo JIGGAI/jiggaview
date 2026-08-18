@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchJson } from "@/lib/fetch-json";
+import { ArtifactPanel } from "@/components/ArtifactPanel";
 import { WorkflowGraph } from "@/components/WorkflowGraph";
 import type { GraphNode, RunGraph } from "@/app/api/workflows/runs/route";
 
@@ -37,14 +38,20 @@ function when(iso: string | null): string {
 function NodeDetail({
   node,
   runId,
+  runStatus,
   busy,
   onDecide,
 }: {
   node: GraphNode;
   runId: string;
+  runStatus: string;
   busy: boolean;
   onDecide: (decision: "approve" | "deny") => void;
 }) {
+  // Core refuses a write to a running run — its nodes are still writing their
+  // own outputs. Say so here rather than offering a button that fails.
+  const editable = runStatus !== "running";
+  const lockedReason = "This run is still going — its nodes are writing these files. Editable once it finishes or parks.";
   return (
     <div className="mt-3 rounded-lg border border-white/10 bg-white/5 p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -82,6 +89,21 @@ function NodeDetail({
           </div>
         </div>
       ) : null}
+      {node.output || node.inputs.length ? (
+        <div className="mt-3">
+          {/* The files this node touches, where the node is — rather than in a
+              separate deliverables list that never says which node wrote what. */}
+          {node.output ? (
+            <ArtifactPanel runId={runId} name={node.output} role="output"
+                           editable={editable} lockedReason={lockedReason} />
+          ) : null}
+          {node.inputs.map((name) => (
+            <ArtifactPanel key={name} runId={runId} name={name} role="input"
+                           editable={editable} lockedReason={lockedReason} />
+          ))}
+        </div>
+      ) : null}
+
       <div className="mt-2 font-mono text-[10px] text-[color:var(--ck-text-tertiary)]">{runId}</div>
     </div>
   );
@@ -207,6 +229,7 @@ export default function RunsClient({ workflowId }: { workflowId?: string }) {
               <NodeDetail
                 node={node}
                 runId={run.runId}
+                runStatus={run.status}
                 busy={busy === `${run.runId}:${node.id}`}
                 onDecide={(decision) => void decide(run, node, decision)}
               />

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { ArtifactPanel } from "@/components/ArtifactPanel";
 import { WorkflowGraph } from "@/components/WorkflowGraph";
 import { fetchJson } from "@/lib/fetch-json";
 import type { GraphEdge, RunGraph } from "@/app/api/workflows/runs/route";
@@ -80,6 +81,10 @@ export function WorkflowEditor({
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
+  /** The newest run of this workflow, so `output: copy.md` on a definition can
+   * show what it actually produced. A definition has no content of its own —
+   * the file only exists once something ran. */
+  const [latestRun, setLatestRun] = useState<{ runId: string; status: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -98,6 +103,25 @@ export function WorkflowEditor({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const out = await fetchJson<{ runs: { runId: string; status: string }[] }>(
+          `/api/workflows/runs?workflowId=${encodeURIComponent(workflowId)}`, { cache: "no-store" },
+        );
+        // Newest last, matching how core lists them.
+        const runs = out.runs ?? [];
+        if (!cancelled) setLatestRun(runs.length ? runs[runs.length - 1] : null);
+      } catch {
+        // A workflow that has never run is the ordinary case, not a failure to
+        // report on an editor screen.
+        if (!cancelled) setLatestRun(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [workflowId]);
+
   const nodes: NodeDoc[] = useMemo(
     () => (doc?.nodes?.length ? doc.nodes : doc?.steps ?? []),
     [doc],
@@ -111,6 +135,13 @@ export function WorkflowEditor({
     // the edge list is disabled below for linear workflows.
     return nodes.slice(0, -1).map((n, i) => ({ from: n.id, to: nodes[i + 1].id, on: "success" }));
   }, [doc, nodes]);
+
+  // A node's input is a mix of literals and references; a value is a file
+  // reference only if some node in this workflow declares it as its output.
+  const declaredOutputs = useMemo(
+    () => new Set(nodes.map((n) => n.output).filter((o): o is string => Boolean(o))),
+    [nodes],
+  );
 
   const graph: RunGraph | null = useMemo(() => {
     if (!doc) return null;
@@ -135,9 +166,13 @@ export function WorkflowEditor({
         delivery: null,
         deliveryError: null,
         depth: depth[n.id] ?? 0,
+        output: n.output ?? null,
+        inputs: Object.values(n.input ?? {}).filter(
+          (v): v is string => typeof v === "string" && declaredOutputs.has(v),
+        ),
       })),
     };
-  }, [doc, nodes, edges, workflowId, isLinear]);
+  }, [doc, nodes, edges, workflowId, isLinear, declaredOutputs]);
 
   function mutate(next: (draft: WorkflowDoc) => void) {
     setDoc((prev) => {
@@ -306,6 +341,26 @@ export function WorkflowEditor({
                 <input className={inputCls} value={node.output ?? ""} placeholder="name later nodes can use"
                        onChange={(e) => updateNode("output", e.target.value)} />
               </label>
+              {node.output ? (
+                latestRun ? (
+                  <div>
+                    <p className="text-[11px] text-[color:var(--ck-text-tertiary)]">
+                      Latest run ({latestRun.status.replace(/_/g, " ")}):
+                    </p>
+                    <ArtifactPanel
+                      runId={latestRun.runId}
+                      name={node.output}
+                      role="output"
+                      editable={latestRun.status !== "running"}
+                      lockedReason="That run is still going — its nodes are writing these files."
+                    />
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-[color:var(--ck-text-tertiary)]">
+                    {node.output} has no content yet — this workflow has not run.
+                  </p>
+                )
+              ) : null}
               <button className={secondaryBtn} onClick={removeNode}>Delete node</button>
             </div>
           ) : (
