@@ -7,10 +7,12 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const runJigga = vi.fn();
 const runJiggaJson = vi.fn();
+const runJiggaWithInput = vi.fn();
 
 vi.mock("@/lib/jigga-cli", () => ({
   runJigga: (args: string[]) => runJigga(args),
   runJiggaJson: (args: string[]) => runJiggaJson(args),
+  runJiggaWithInput: (args: string[], input: string) => runJiggaWithInput(args, input),
 }));
 
 const { GET, PUT } = await import("./route");
@@ -55,6 +57,7 @@ function wire({ installed = [{ scaffold_id: "mt", artifacts: ["workflows/install
 beforeEach(() => {
   runJigga.mockReset();
   runJiggaJson.mockReset();
+  runJiggaWithInput.mockReset();
   wire();
 });
 
@@ -136,21 +139,21 @@ describe("editing", () => {
     expect(body.content).toContain("id: declared_flow");
   });
 
-  it("saves through core so validation applies", async () => {
-    runJigga.mockResolvedValue({ ok: true, exitCode: 0, stdout: '{"workflow":"declared_flow"}', stderr: "" });
+  it("saves through core so validation applies, with the yaml on stdin", async () => {
+    runJiggaWithInput.mockResolvedValue({ ok: true, exitCode: 0, stdout: '{"workflow":"declared_flow"}', stderr: "" });
     const res = await PUT(new Request("http://localhost/api/teams/workflows", {
       method: "PUT",
       body: JSON.stringify({ id: "declared_flow", content: "id: declared_flow\nname: X\n" }),
     }));
-    expect(runJigga).toHaveBeenCalledWith([
-      "workflow", "save", "declared_flow", "--content", "id: declared_flow\nname: X\n", "--json",
-    ]);
+    const [args, input] = runJiggaWithInput.mock.calls[0];
+    expect(args).toEqual(["workflow", "save", "declared_flow", "--json"]);
+    expect(input).toBe("id: declared_flow\nname: X\n");
     expect(res.status).toBe(200);
   });
 
   it("surfaces core's refusal instead of a generic failure", async () => {
     // The reason is the useful part: "`id: other` does not match…", "cycle".
-    runJigga.mockResolvedValue({
+    runJiggaWithInput.mockResolvedValue({
       ok: false, exitCode: 1,
       stdout: "! Not saved — workflow cyc: workflow graph has a cycle", stderr: "",
     });
@@ -168,6 +171,6 @@ describe("editing", () => {
       body: JSON.stringify({ id: "--home", content: "x" }),
     }));
     expect(res.status).toBe(400);
-    expect(runJigga).not.toHaveBeenCalled();
+    expect(runJiggaWithInput).not.toHaveBeenCalled();
   });
 });

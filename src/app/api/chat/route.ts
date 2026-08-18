@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runJigga, runJiggaJson } from "@/lib/jigga-cli";
+import { runJiggaJson, runJiggaWithInput } from "@/lib/jigga-cli";
 
 /** The Chat page ↔ webchat channel boundary (JIGGA M2).
  *
@@ -47,9 +47,12 @@ export async function POST(request: Request) {
   const text = String(body.text ?? "").trim();
   const conversation = String(body.conversation ?? "web").trim() || "web";
   const agent = String(body.agent ?? "").trim();
-  if (!text || text.startsWith("-") || conversation.startsWith("-") || agent.startsWith("-")) {
+  if (!text || conversation.startsWith("-") || agent.startsWith("-")) {
     return NextResponse.json({ ok: false, error: "text required" }, { status: 400 });
   }
+  // The text needs no leading-dash guard now that it goes over stdin, where it
+  // cannot be read as a flag. That guard also rejected legitimate messages — a
+  // line starting "- " is a bullet, not an attack.
   // `wait: false` appends to the inbox and returns. Used when the agent is
   // already working: the message is durable immediately, and the supervisor
   // picks it up on its next tick. Deliberately does NOT ask the runtime to run
@@ -57,12 +60,13 @@ export async function POST(request: Request) {
   // not a feature.
   const wait = body.wait !== false;
   const args = [
-    "webchat", "send", "--json", "--text", text, "--conversation", conversation,
+    "webchat", "send", "--json", "--conversation", conversation,
     ...(wait ? ["--wait"] : []),
   ];
   // Address a specific agent (the picker); without it the channel default answers.
   if (agent) args.push("--agent", agent);
-  const res = await runJigga(args);
+  // The message body goes on stdin: argv is world-readable through /proc.
+  const res = await runJiggaWithInput(args, text);
   if (!res.ok) {
     // CLI errors print to stdout under --json paths too — surface both.
     const detail = res.stderr.trim() || res.stdout.trim() || `send failed (exit=${res.exitCode})`;
