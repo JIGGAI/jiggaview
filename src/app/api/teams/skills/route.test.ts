@@ -26,7 +26,9 @@ const TOOLS: Record<string, unknown[]> = {
   "mt-editor": [],
 };
 
-function wire({ members = [{ id: "mt-lead" }, { id: "mt-editor" }], skills = { skills: [], pending_approval: [] } } = {}) {
+function wire({ members = [{ id: "mt-lead" }, { id: "mt-editor" }],
+               skills = { skills: [], pending_approval: [] } as
+                 { skills: { name: string }[]; pending_approval: { name: string }[] } } = {}) {
   runJiggaJson.mockImplementation((args: string[]) => {
     if (args[0] === "team") return Promise.resolve({ agents: members });
     if (args[0] === "agents" && args[1] === "tools") {
