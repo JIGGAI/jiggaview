@@ -1,5 +1,5 @@
 import Link from "next/link";
-import EditorClient from "./editor-client";
+import { WorkflowEditor } from "@/components/WorkflowEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ export default async function WorkflowEditorPage({
         The shape is the workflow: which node feeds which, and where an error goes. Edits are
         validated on save by the same checks the supervisor runs.
       </p>
-      <EditorClient workflowId={workflowId} />
+      <WorkflowEditor workflowId={workflowId} />
     </div>
   );
 }
