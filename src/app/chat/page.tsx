@@ -49,9 +49,11 @@ function Bubble({ entry, pending }: { entry: ChatEntry; pending?: "sending" | "q
       >
         {entry.text}
         <div className={`mt-1 text-[10px] ${mine ? "text-white/70" : "text-[color:var(--ck-text-tertiary)]"}`}>
-          {pending === "queued"
-            ? "queued · waiting for the agent"
-            : `${entry.sender} · ${String(entry.ts ?? "").slice(11, 16)}`}
+          {pending === "sending"
+            ? "sent · the agent is working on this now"
+            : pending === "queued"
+              ? "queued · runs after the current reply"
+              : `${entry.sender} · ${String(entry.ts ?? "").slice(11, 16)}`}
         </div>
       </div>
     </div>
@@ -454,7 +456,7 @@ export default function ChatPage() {
               onChange={(e) => setInput(e.target.value)}
               placeholder={
                 sending
-                  ? `${current?.name ?? "The agent"} is working — your next message queues`
+                  ? `Type ahead — ${current?.name ?? "the agent"} gets this next`
                   : `Message ${current?.name ?? "your agent"}…`
               }
               autoFocus
@@ -465,7 +467,7 @@ export default function ChatPage() {
               disabled={!input.trim() || !current}
               className="rounded-lg bg-[color:var(--ck-accent,#e8604c)] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
-              {sending ? "Queue" : "Send"}
+              Send
             </button>
           </form>
         </div>
