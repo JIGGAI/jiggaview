@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { DeleteEntityButton } from "@/components/DeleteEntityButton";
 import { fetchJson } from "@/lib/fetch-json";
 import { WorkspaceFiles } from "@/components/WorkspaceFiles";
 import { DEFAULT_TEAM_TAB, TEAM_TAB_LIST, type TeamTabId } from "./team-tabs";
@@ -314,9 +315,12 @@ export default function TeamEditor({
           </h1>
           <div className="font-mono text-xs text-[color:var(--ck-text-tertiary)]">{teamId}</div>
         </div>
-        <button className={secondaryBtn} disabled={busy} onClick={() => void toggleDisabled()}>
-          {disabled ? "Enable team" : "Disable team"}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button className={secondaryBtn} disabled={busy} onClick={() => void toggleDisabled()}>
+            {disabled ? "Enable team" : "Disable team"}
+          </button>
+          <DeleteEntityButton kind="team" id={teamId} redirectTo="/teams" />
+        </div>
       </div>
 
       <div className="mt-4 flex gap-2 py-2">
