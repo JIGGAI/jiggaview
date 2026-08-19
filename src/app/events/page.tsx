@@ -64,7 +64,7 @@ export default async function EventsPage({
       </div>
 
       <div className="mt-4">
-        {tab === "runs" ? <RunsTable /> : <TasksTable teamId={teamId} />}
+        {tab === "runs" ? <RunsTable sp={sp} /> : <TasksTable sp={sp} teamId={teamId} />}
       </div>
     </div>
   );
