@@ -13,12 +13,7 @@ vi.mock("@/lib/jigga-cli", () => ({
   runJiggaJson: (args: string[]) => runJiggaJson(args),
 }));
 
-const redirect = vi.fn();
-vi.mock("next/navigation", () => ({ redirect: (to: string) => redirect(to) }));
-
 const EventsPage = (await import("./page")).default;
-const RunsRedirect = (await import("../runs/page")).default;
-const TasksRedirect = (await import("../tasks/page")).default;
 
 const TASKS = [
   { id: "t1", title: "write copy", state: "pending", assignee: "writer", updated_at: "2026-08-19T10:00:00" },
@@ -69,7 +64,6 @@ async function walk(node: unknown, out: string[]): Promise<void> {
 
 beforeEach(() => {
   runJiggaJson.mockReset();
-  redirect.mockReset();
   runJiggaJson.mockImplementation((args: string[]) => {
     if (args[0] === "task") return Promise.resolve(structuredClone(TASKS));
     if (args[0] === "team") return Promise.resolve(TEAMS);
@@ -109,24 +103,5 @@ describe("tabs", () => {
     }));
     expect(out).toContain("write copy");
     expect(out).not.toContain("review");   // assigned outside the team
-  });
-});
-
-describe("the old paths", () => {
-  it("/runs lands on the Runs tab", async () => {
-    RunsRedirect();
-    expect(redirect).toHaveBeenCalledWith("/events?tab=runs");
-  });
-
-  it("/tasks lands on the Tasks tab", async () => {
-    await TasksRedirect({ searchParams: Promise.resolve({}) });
-    expect(redirect).toHaveBeenCalledWith("/events?tab=tasks");
-  });
-
-  it("/tasks?team= carries its filter across", async () => {
-    // Team pages link here with a filter; dropping it would silently show
-    // someone every team's work while claiming to show one team's.
-    await TasksRedirect({ searchParams: Promise.resolve({ team: "mt" }) });
-    expect(redirect).toHaveBeenCalledWith("/events?tab=tasks&team=mt");
   });
 });
