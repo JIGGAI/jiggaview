@@ -1,7 +1,5 @@
 import { runJiggaJson } from "@/lib/jigga-cli";
 
-export const dynamic = "force-dynamic";
-
 type Task = {
   id: string;
   title: string;
@@ -23,13 +21,7 @@ const STATE_BADGE: Record<string, string> = {
 
 type Team = { id: string; members: string[] };
 
-export default async function TasksPage({
-  searchParams,
-}: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const sp = (await searchParams) ?? {};
-  const teamId = typeof sp.team === "string" ? sp.team : "";
+export async function TasksTable({ teamId = "" }: { teamId?: string }) {
   let tasks: Task[] = [];
   let error: string | null = null;
   try {
@@ -47,8 +39,7 @@ export default async function TasksPage({
 
   return (
     <div className="w-full">
-      <h1 className="text-xl font-semibold">Tasks</h1>
-      <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
+      <p className="text-sm text-[color:var(--ck-text-secondary)]">
         The runtime task queue — every channel message, scheduled wake, and dispatch.
         {teamId ? ` Filtered to team: ${teamId}.` : ""} (Lane boards land with ticket lanes, JIGGA #110.)
       </p>

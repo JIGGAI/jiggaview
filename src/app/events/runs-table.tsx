@@ -1,7 +1,5 @@
 import { runJiggaJson } from "@/lib/jigga-cli";
 
-export const dynamic = "force-dynamic";
-
 type AuditEvent = {
   ts?: string;
   type: string;
@@ -17,7 +15,7 @@ const STATUS_BADGE: Record<string, string> = {
   ask: "bg-amber-500/20 text-amber-300",
 };
 
-export default async function RunsPage() {
+export async function RunsTable() {
   let events: AuditEvent[] = [];
   let error: string | null = null;
   try {
@@ -29,8 +27,7 @@ export default async function RunsPage() {
 
   return (
     <div className="w-full">
-      <h1 className="text-xl font-semibold">Runs</h1>
-      <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
+      <p className="text-sm text-[color:var(--ck-text-secondary)]">
         The audit log — every wake, tool call, delivery, and policy decision.
         Trace one operation: <code>jigga trace &lt;task_id&gt;</code>.
       </p>
