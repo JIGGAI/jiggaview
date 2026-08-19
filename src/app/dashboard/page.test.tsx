@@ -65,10 +65,17 @@ function wire(overrides: Record<string, unknown> = {}) {
   });
 }
 
+/** Render a server-component tree to plain text.
+ *
+ * Separators go at ELEMENT boundaries, not between text fragments. JSX like
+ * `{n} agent{n === 1 ? "" : "s"}` is three adjacent text children of one
+ * element; spacing them apart would turn "2 agents" into "2 agent s" and make
+ * every assertion about rendered copy a lie about what the page shows.
+ */
 async function text(node: unknown): Promise<string> {
   const parts: string[] = [];
   await walk(node, parts);
-  return parts.join(" ").replace(/\s+/g, " ");
+  return parts.join("").replace(/\s+/g, " ").trim();
 }
 
 type Renderable = { type?: unknown; props?: { href?: unknown; children?: unknown }; then?: unknown };
@@ -87,8 +94,10 @@ async function walk(node: unknown, out: string[]): Promise<void> {
   if (typeof element.type === "function") {
     return walk(await (element.type as (p: unknown) => unknown)(props), out);
   }
-  if (typeof props.href === "string") out.push(props.href);
+  out.push(" ");
+  if (typeof props.href === "string") out.push(`${props.href} `);
   await walk(props.children, out);
+  out.push(" ");
 }
 
 const render = (params: Record<string, string> = {}) =>
@@ -166,6 +175,28 @@ describe("teams", () => {
   it("falls back to the first team when the URL names one that is gone", async () => {
     const out = await render({ team: "deleted" });
     expect(out).toContain("/tickets?team=mt");
+  });
+
+  it("shows each team as a card with its agent count", async () => {
+    const out = await render();
+    expect(out).toContain("Marketing");
+    expect(out).toContain("2 agents");   // lead + writer, both real agents
+    expect(out).toContain("0 agents");   // eng has none
+  });
+
+  it("counts only roster members that still exist as agents", async () => {
+    // Core keeps a roster entry after its agent is deleted — workflows and
+    // handoffs may still name it — so roster length overstates who can be
+    // woken. The gap is called out rather than folded into the count.
+    wire({ "team list": [{ id: "mt", name: "Marketing", members: ["lead", "ghost"] }] });
+    const out = await render();
+    expect(out).toContain("1 agent");
+    expect(out).toContain("1 missing");
+  });
+
+  it("says nothing about missing members when the roster is intact", async () => {
+    const out = await render();
+    expect(out).not.toContain("missing");
   });
 
   it("marks a gated lane", async () => {
