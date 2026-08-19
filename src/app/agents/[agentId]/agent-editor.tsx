@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { WorkspaceFiles } from "@/components/WorkspaceFiles";
+import { DeleteEntityButton } from "@/components/DeleteEntityButton";
 import { fetchJson } from "@/lib/fetch-json";
 
 type Tab = "identity" | "config" | "files";
@@ -204,9 +205,14 @@ export default function AgentEditor({
               <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">disabled</span>
             ) : null}
           </div>
-          <button className={secondaryBtn} disabled={busy} onClick={() => void toggleDisabled()}>
-            {disabled ? "Enable agent" : "Disable agent"}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button className={secondaryBtn} disabled={busy} onClick={() => void toggleDisabled()}>
+              {disabled ? "Enable agent" : "Disable agent"}
+            </button>
+            {/* Deliberately beside Disable: the reversible option should be the
+                one you reach first, and the destructive one should look it. */}
+            <DeleteEntityButton kind="agent" id={agentId} redirectTo="/" />
+          </div>
         </div>
       </div>
 
