@@ -226,3 +226,42 @@ describe("filters, sorting and paging", () => {
     expect(href(current, { page: 3 })).toContain("page=3");
   });
 });
+
+describe("search", () => {
+  it("passes the run search to the CLI, so it covers the whole log", async () => {
+    // Searching the fetched rows would only search the page you are on; the
+    // match for a rare string usually sits deeper in the log (JIGGA #223).
+    runJiggaJson.mockImplementation((args: string[]) =>
+      Promise.resolve(args[0] === "audit" ? EVENTS : []));
+    await text(EventsPage({ searchParams: Promise.resolve({ tab: "runs", q: "getUpdates failed" }) }));
+    const args = runJiggaJson.mock.calls.map((c) => c[0]).find((a) => a[0] === "audit");
+    expect(args).toEqual(expect.arrayContaining(["--contains", "getUpdates failed"]));
+  });
+
+  it("combines search with the other run filters rather than replacing them", async () => {
+    runJiggaJson.mockImplementation((args: string[]) =>
+      Promise.resolve(args[0] === "audit" ? EVENTS : []));
+    await text(EventsPage({
+      searchParams: Promise.resolve({ tab: "runs", q: "429", status: "error", since: "24h" }),
+    }));
+    const args = runJiggaJson.mock.calls.map((c) => c[0]).find((a) => a[0] === "audit");
+    expect(args).toEqual(expect.arrayContaining(
+      ["--contains", "429", "--status", "error", "--since", "24h"]));
+  });
+
+  it("does not send an empty search", async () => {
+    // `--contains ""` would be a filter that matches everything; sending it is
+    // noise in the audit of what the UI asked for.
+    runJiggaJson.mockImplementation((args: string[]) =>
+      Promise.resolve(args[0] === "audit" ? EVENTS : []));
+    await text(EventsPage({ searchParams: Promise.resolve({ tab: "runs", q: "" }) }));
+    const args = runJiggaJson.mock.calls.map((c) => c[0]).find((a) => a[0] === "audit");
+    expect(args).not.toContain("--contains");
+  });
+
+  it("says the page reads files, so a slow load is explained rather than mysterious", async () => {
+    runJiggaJson.mockResolvedValue([]);
+    const out = await text(EventsPage({ searchParams: Promise.resolve({}) }));
+    expect(out).toContain("not in a database");
+  });
+});

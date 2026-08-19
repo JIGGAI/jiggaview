@@ -45,6 +45,8 @@ export async function RunsTable({ sp }: { sp: Params }) {
   const agent = one(sp, "agent");
   const actor = one(sp, "actor");
   const since = one(sp, "since");
+  const search = one(sp, "q");
+  if (search) args.push("--contains", search);
   if (type) args.push("--type", type);
   if (status) args.push("--status", status);
   if (agent) args.push("--agent", agent);
@@ -83,6 +85,8 @@ export async function RunsTable({ sp }: { sp: Params }) {
       {error ? <p className="mt-4 text-sm text-red-400">{error}</p> : null}
       <div className="mt-4">
         <FilterBar tab="runs" sp={sp}>
+          <TextFilter name="q" label="search" value={search}
+                      placeholder="error text, path, id…" />
           <TextFilter name="type" label="type" value={type} placeholder="agent.tool_call" />
           <SelectFilter name="status" label="status" value={status} options={STATUSES} />
           <TextFilter name="agent" label="agent" value={agent} placeholder="chief" />
@@ -147,7 +151,7 @@ export async function RunsTable({ sp }: { sp: Params }) {
             {events.length === 0 && !error ? (
               <tr>
                 <td className="px-3 py-6 text-center text-[color:var(--ck-text-tertiary)]" colSpan={4}>
-                  {type || status || agent || actor || since
+                  {search || type || status || agent || actor || since
                     ? "No events match these filters."
                     : "No events yet."}
                 </td>
