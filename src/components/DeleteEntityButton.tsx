@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { ConfirmationModal } from "@/components/ConfirmationModal";
 import { fetchJson } from "@/lib/fetch-json";
 
@@ -55,10 +55,6 @@ export function DeleteEntityButton({
     }
   }, [kind, id]);
 
-  useEffect(() => {
-    if (open && preview === null) void load();
-  }, [open, preview, load]);
-
   async function confirm() {
     setBusy(true);
     setError(null);
@@ -86,7 +82,17 @@ export function DeleteEntityButton({
     <>
       <button
         type="button"
-        onClick={() => { setOpen(true); setTyped(""); setError(null); }}
+        onClick={() => {
+          setOpen(true);
+          setTyped("");
+          setError(null);
+          setPreview(null);
+          // Fetched on open rather than in an effect: it is a response to the
+          // click, not to a render, and re-reading it each time means the list
+          // reflects the record as it is now, not as it was when the page
+          // loaded.
+          void load();
+        }}
         className={className ??
           "rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm font-medium " +
           "text-red-200 transition-colors hover:bg-red-500/20"}
