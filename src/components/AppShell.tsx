@@ -122,22 +122,6 @@ const NAV = [
     ),
   },
   {
-    // Runs and Tasks were two entries answering two halves of one question —
-    // what the runtime did, and what it has been asked to do. One entry, two
-    // tabs; the old paths redirect in.
-    href: "/events",
-    label: "Events",
-    icon: (
-      <Icon>
-        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M4 19h16" />
-          <path d="M6 16l4-4 3 3 5-7" />
-          <path d="M4 5h9" />
-        </svg>
-      </Icon>
-    ),
-  },
-  {
     href: "/workflows",
     label: "Workflows",
     icon: (
@@ -160,6 +144,22 @@ const NAV = [
           <path d="M9 3v4M15 3v4" />
           <path d="M6 7h12v6a6 6 0 0 1-12 0V7Z" />
           <path d="M12 19v2" />
+        </svg>
+      </Icon>
+    ),
+  },
+  {
+    // Runs and Tasks were two entries answering two halves of one question —
+    // what the runtime did, and what it has been asked to do. One entry, two
+    // tabs; the old paths redirect in.
+    href: "/events",
+    label: "Events",
+    icon: (
+      <Icon>
+        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M4 19h16" />
+          <path d="M6 16l4-4 3 3 5-7" />
+          <path d="M4 5h9" />
         </svg>
       </Icon>
     ),
