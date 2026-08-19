@@ -39,6 +39,11 @@ export default async function EventsPage({
   return (
     <div className="w-full">
       <h1 className="text-xl font-semibold">Events</h1>
+      <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
+        JIGGA keeps this on disk, not in a database — every view here is read
+        from the log and task files, so a page can take a couple of seconds.
+        Filters and search run over the whole history, not just the rows below.
+      </p>
 
       <div className="mt-4 flex gap-2" role="tablist" aria-label="Events">
         {TABS.map((entry) => {
