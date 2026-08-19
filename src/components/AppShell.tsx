@@ -109,17 +109,6 @@ const NAV = [
     ),
   },
   {
-    href: "/tasks",
-    label: "Tasks",
-    icon: (
-      <Icon>
-        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M4 7h16v4a2 2 0 0 1 0 4v4H4v-4a2 2 0 0 0 0-4z" />
-        </svg>
-      </Icon>
-    ),
-  },
-  {
     href: "/tickets",
     label: "Tickets",
     icon: (
@@ -133,13 +122,17 @@ const NAV = [
     ),
   },
   {
-    href: "/runs",
-    label: "Runs",
+    // Runs and Tasks were two entries answering two halves of one question —
+    // what the runtime did, and what it has been asked to do. One entry, two
+    // tabs; the old paths redirect in.
+    href: "/events",
+    label: "Events",
     icon: (
       <Icon>
         <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M4 19h16" />
           <path d="M6 16l4-4 3 3 5-7" />
+          <path d="M4 5h9" />
         </svg>
       </Icon>
     ),
