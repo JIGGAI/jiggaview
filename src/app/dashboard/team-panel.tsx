@@ -41,17 +41,53 @@ export async function TeamPanel({ teams, agents, teamId }: {
         </Link>
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {teams.map((entry) => (
-          <Link key={entry.id} href={`/dashboard?team=${encodeURIComponent(entry.id)}`}
-                aria-current={entry.id === team.id ? "true" : undefined}
-                className={"rounded-full px-3 py-1 text-xs font-medium transition-colors " +
-                  (entry.id === team.id
-                    ? "bg-white/15 text-[color:var(--ck-text-primary)]"
-                    : "bg-white/5 text-[color:var(--ck-text-tertiary)] hover:bg-white/10")}>
-            {entry.name}
-          </Link>
-        ))}
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {teams.map((entry) => {
+          const selected = entry.id === team.id;
+          const roster = entry.members ?? [];
+          // Count members that still EXIST as agents. Core keeps a roster entry
+          // after its agent is deleted, on purpose — workflows and handoffs may
+          // still name it — so the roster length can be larger than the number
+          // of agents that can actually be woken.
+          const live = roster.filter((id) => agents.some((a) => a.id === id));
+          const missing = roster.length - live.length;
+          return (
+            <Link
+              key={entry.id}
+              href={`/dashboard?team=${encodeURIComponent(entry.id)}`}
+              aria-current={selected ? "true" : undefined}
+              className={"rounded-xl border p-3 transition-colors " + (selected
+                ? "border-[color:var(--ck-border-strong)] bg-white/10"
+                : "border-[color:var(--ck-border-subtle)] bg-white/[0.03] hover:bg-white/[0.07]")}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-medium leading-tight">{entry.name}</span>
+                {selected ? (
+                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[var(--ck-accent-red)]" />
+                ) : null}
+              </div>
+              <div className="mt-0.5 font-mono text-[11px] text-[color:var(--ck-text-tertiary)]">
+                {entry.id}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs
+                              text-[color:var(--ck-text-secondary)]">
+                <span className="tabular-nums">
+                  {live.length} agent{live.length === 1 ? "" : "s"}
+                </span>
+                {missing > 0 ? (
+                  <span className="text-amber-300" title="Roster entries whose agent no longer exists">
+                    {missing} missing
+                  </span>
+                ) : null}
+                {entry.lead ? (
+                  <span className="truncate text-[color:var(--ck-text-tertiary)]">
+                    lead: {entry.lead}
+                  </span>
+                ) : null}
+              </div>
+            </Link>
+          );
+        })}
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
