@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { fetchJson } from "@/lib/fetch-json";
+import TicketDialog from "./ticket-dialog";
 import type { Lane, Ticket } from "./page";
 
 const STATE_BADGE: Record<string, string> = {
@@ -19,15 +20,28 @@ function TicketCard({
   lanes,
   busy,
   onMove,
+  onEdit,
 }: {
   ticket: Ticket;
   lanes: Lane[];
   busy: boolean;
   onMove: (ticket: Ticket, lane: string) => void;
+  onEdit: (ticket: Ticket) => void;
 }) {
   return (
     <li className="rounded-lg border border-[color:var(--ck-border-subtle)] bg-white/5 p-3">
-      <div className="text-sm font-medium">{ticket.title}</div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-sm font-medium">{ticket.title}</div>
+        <button
+          type="button"
+          onClick={() => onEdit(ticket)}
+          disabled={busy}
+          className="shrink-0 rounded-md border border-white/10 px-1.5 py-0.5 text-xs text-[color:var(--ck-text-tertiary)] hover:bg-white/10 disabled:opacity-50"
+          aria-label={`Edit ${ticket.title}`}
+        >
+          Edit
+        </button>
+      </div>
       <div className="mt-1 flex items-center gap-2 text-xs text-[color:var(--ck-text-tertiary)]">
         <span className={`rounded-full px-2 py-0.5 ${STATE_BADGE[ticket.state] ?? "bg-white/10"}`}>{ticket.state}</span>
         <span>{ticket.assignee ?? "—"}</span>
@@ -60,12 +74,14 @@ function Column({
   lanes,
   busy,
   onMove,
+  onEdit,
 }: {
   lane: Lane | { id: string; description?: string | null; gate?: null };
   tickets: Ticket[];
   lanes: Lane[];
   busy: boolean;
   onMove: (ticket: Ticket, lane: string) => void;
+  onEdit: (ticket: Ticket) => void;
 }) {
   return (
     <div className="flex min-w-[240px] max-w-[300px] flex-1 flex-col rounded-xl border border-[color:var(--ck-border-subtle)] bg-black/20">
@@ -85,7 +101,7 @@ function Column({
       </div>
       <ul className="flex flex-col gap-2 p-2">
         {tickets.map((t) => (
-          <TicketCard key={t.id} ticket={t} lanes={lanes} busy={busy} onMove={onMove} />
+          <TicketCard key={t.id} ticket={t} lanes={lanes} busy={busy} onMove={onMove} onEdit={onEdit} />
         ))}
         {tickets.length === 0 ? (
           <li className="px-2 py-4 text-center text-xs text-[color:var(--ck-text-tertiary)]">—</li>
@@ -100,17 +116,20 @@ export default function TicketsBoard({
   teamId,
   lanes,
   tickets,
+  members,
 }: {
   teams: Array<{ id: string; name: string }>;
   teamId: string;
   lanes: Lane[];
   tickets: Ticket[];
+  members: string[];
 }) {
   const router = useRouter();
   const params = useSearchParams();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [actAs, setActAs] = useState("");
+  const [dialog, setDialog] = useState<{ mode: "create" | "edit"; ticket?: Ticket } | null>(null);
 
   function switchTeam(id: string) {
     const next = new URLSearchParams(params.toString());
@@ -136,6 +155,11 @@ export default function TicketsBoard({
     } finally {
       setBusy(false);
     }
+  }
+
+  function saved(text: string) {
+    setMessage(text);
+    router.refresh();
   }
 
   // Group tickets by lane; collect any whose lane is unset/stale under UNFILED.
@@ -175,11 +199,35 @@ export default function TicketsBoard({
             className="w-56 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm"
           />
         </label>
+        {teamId ? (
+          <button
+            type="button"
+            onClick={() => setDialog({ mode: "create" })}
+            disabled={busy || !lanes.length}
+            title={lanes.length ? undefined : "This team has no ticket board yet."}
+            className="ml-auto rounded-lg bg-white/15 px-3 py-1.5 text-sm font-medium hover:bg-white/25 disabled:opacity-50"
+          >
+            New ticket
+          </button>
+        ) : null}
       </div>
 
       {message ? <p className="mt-3 text-sm text-[color:var(--ck-text-secondary)]">{message}</p> : null}
 
       {renderBody()}
+
+      {dialog ? (
+        <TicketDialog
+          mode={dialog.mode}
+          ticket={dialog.ticket}
+          teamId={teamId}
+          lanes={lanes}
+          members={members}
+          actAs={actAs}
+          onClose={() => setDialog(null)}
+          onSaved={saved}
+        />
+      ) : null}
     </div>
   );
 
@@ -198,7 +246,15 @@ export default function TicketsBoard({
     return (
       <div className="mt-6 flex gap-3 overflow-x-auto pb-2">
         {lanes.map((lane) => (
-          <Column key={lane.id} lane={lane} tickets={byLane.get(lane.id) ?? []} lanes={lanes} busy={busy} onMove={move} />
+          <Column
+            key={lane.id}
+            lane={lane}
+            tickets={byLane.get(lane.id) ?? []}
+            lanes={lanes}
+            busy={busy}
+            onMove={move}
+            onEdit={(t) => setDialog({ mode: "edit", ticket: t })}
+          />
         ))}
         {unfiled.length ? (
           <Column
@@ -207,6 +263,7 @@ export default function TicketsBoard({
             lanes={lanes}
             busy={busy}
             onMove={move}
+            onEdit={(t) => setDialog({ mode: "edit", ticket: t })}
           />
         ) : null}
       </div>

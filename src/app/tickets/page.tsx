@@ -8,6 +8,9 @@ export type Lane = { id: string; description?: string | null; gate?: string | nu
 export type Ticket = {
   id: string;
   title: string;
+  // The ticket body. `task list --json` has always returned it; the board had
+  // no use for it until tickets became editable here.
+  description?: string | null;
   state: string;
   assignee?: string | null;
   lane?: string | null;
@@ -61,6 +64,7 @@ export default async function TicketsPage({
         teamId={teamId}
         lanes={lanes}
         tickets={tickets}
+        members={teams.find((t) => t.id === teamId)?.members ?? []}
       />
     </div>
   );
